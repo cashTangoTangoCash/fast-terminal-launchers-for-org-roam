@@ -181,3 +181,199 @@ fi
 </ul>
 <p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134256_capture.md&quot;)</p>
 <hr />
+<h1>PROMPT 4</h1>
+<p>[dad84@dad84-2013PC ~]$ roam-find-recently-modified-shown-first.sh 
+Parse error in 4th command line argument: no such column: mtime
+   WHERE title IS NOT NULL AND title != '' ORDER BY mtime DESC;
+                                      error here ---^</p>
+<p>let's again break down the SELECTION= line in the script piece by piece and find a fix for this error</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134353_capture.md&quot;)</p>
+<hr />
+<h1>RESPONSE 4</h1>
+<p>That error occurs because the <code>mtime</code> column lives on the <code>files</code> table in the Org-roam database schema, not directly on the <code>nodes</code> table.</p>
+<p>To fix this, we need to join the <code>nodes</code> table with the <code>files</code> table using <code>nodes.file = files.file</code>.</p>
+<hr />
+<h3>Step 1: Inspect the Schema and Tables</h3>
+<p>You can verify how tables are linked directly in SQLite:</p>
+<pre><code class="language-bash">sqlite3 ~/.emacs.d/org-roam.db &quot;.schema nodes&quot;
+sqlite3 ~/.emacs.d/org-roam.db &quot;.schema files&quot;
+
+</code></pre>
+<ul>
+<li><strong>What you'll see:</strong> The <code>files</code> table contains <code>file</code> and <code>mtime</code> (or <code>atime</code>), while the <code>nodes</code> table contains <code>id</code>, <code>title</code>, and <code>file</code>.</li>
+</ul>
+<hr />
+<h3>Step 2: Test the Table Join in SQLite</h3>
+<p>Join <code>nodes</code> and <code>files</code> on the matching <code>file</code> column and order by <code>files.mtime DESC</code>:</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db \
+  &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC LIMIT 5;&quot; \
+  | tr -d '&quot;'
+
+</code></pre>
+<ul>
+<li><strong>What to look for:</strong> This should cleanly print your 5 most recently modified note titles alongside their file paths, without any parse errors.</li>
+</ul>
+<hr />
+<h3>Step 3: Test piping the Joined Data into <code>fzf</code></h3>
+<p>Now pipe that output into <code>fzf</code> with <code>--tiebreak=index</code>:</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db \
+  &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC LIMIT 10;&quot; \
+  | tr -d '&quot;' \
+  | fzf --delimiter=$'\t' --with-nth=1 --tiebreak=index --preview 'head -n 30 {2}'
+
+</code></pre>
+<hr />
+<h3>The Fixed Script</h3>
+<p>Here is the updated script with the <code>JOIN</code> added to the <code>SELECTION=</code> query:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+
+DB_PATH=&quot;${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db&quot;
+[[ ! -f &quot;$DB_PATH&quot; ]] &amp;&amp; DB_PATH=&quot;$HOME/.emacs.d/org-roam.db&quot;
+
+if [[ ! -f &quot;$DB_PATH&quot; ]]; then
+    echo &quot;Error: Org-roam database not found at $DB_PATH&quot; &gt;&amp;2
+    exit 1
+fi
+
+# 1. Join nodes and files tables to access files.mtime
+# 2. Clean quotes with tr
+# 3. Present in fzf sorted by mtime DESC
+SELECTION=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; \
+    &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC;&quot; \
+    | tr -d '&quot;' \
+    | fzf --delimiter=$'\t' \
+          --with-nth=1 \
+          --tiebreak=index \
+          --preview 'head -n 30 {2}' \
+          --preview-window=right:50%:wrap)
+
+if [[ -n &quot;$SELECTION&quot; ]]; then
+    FILE=$(echo &quot;$SELECTION&quot; | cut -f2)
+    emacsclient -n &quot;$FILE&quot;
+fi
+
+</code></pre>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134359_capture.md&quot;)</p>
+<hr />
+<h1>PROMPT 5</h1>
+<p>ok, let's go step by step together:</p>
+<p>[dad84@dad84-2013PC ~]$ sqlite3 ~/.emacs.d/org-roam.db &quot;.schema nodes&quot;
+sqlite3 ~/.emacs.d/org-roam.db &quot;.schema files&quot;
+CREATE TABLE nodes (id NOT NULL PRIMARY KEY, file NOT NULL, level NOT NULL, pos NOT NULL, todo , priority , scheduled text, deadline text, title , properties , olp , FOREIGN KEY (file) REFERENCES files (file) ON DELETE CASCADE);
+CREATE TABLE files (file UNIQUE PRIMARY KEY, title , hash NOT NULL, atime NOT NULL, mtime NOT NULL);</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134401_capture.md&quot;)</p>
+<hr />
+<h1>RESPONSE 5</h1>
+<p>That schema output confirms two crucial details:</p>
+<ol>
+<li><strong>The Link Key:</strong> <code>nodes</code> references <code>files</code> via <code>FOREIGN KEY (file) REFERENCES files (file)</code>.</li>
+<li><strong>The Timestamp Column:</strong> The <code>files</code> table contains <code>mtime</code> (last modification time), which was missing from the <code>nodes</code> table.</li>
+</ol>
+<p>Now let's move to <strong>Step 2</strong>: testing the <code>JOIN</code> directly in <code>sqlite3</code> to confirm it sorts your notes by modification time without errors.</p>
+<p>Run this command in your terminal:</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db \
+  &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC LIMIT 5;&quot; \
+  | tr -d '&quot;'
+
+</code></pre>
+<h3>What to check:</h3>
+<ul>
+<li>Do you see 5 note titles printed alongside their file paths?</li>
+<li>Are the notes you modified most recently sitting at the very top?</li>
+</ul>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134404_capture.md&quot;)</p>
+<hr />
+<h1>PROMPT 6</h1>
+<p>the output is verified.  I would paste it here but it has a little bit too much personal information.  of note is that without tr, sqlite3 output is formatted very prettily in a table structure.  let's continue to the next step (fzf)</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134406_capture.md&quot;)</p>
+<hr />
+<h1>RESPONSE 6</h1>
+<p>Great! Seeing that table layout means the SQL join and ordering are working as expected.</p>
+<p>The reason <code>sqlite3</code> without <code>-separator</code> prints a nice table is that it defaults to column output when interactive. Adding <code>-separator $'\t'</code> turns it into plain tab-separated values, which is necessary so <code>fzf</code> can split the title from the file path.</p>
+<hr />
+<h3>Step 3: Test <code>fzf</code> Integration</h3>
+<p>Now we test piping that tab-separated output into <code>fzf</code>. We'll use:</p>
+<ul>
+<li><code>--delimiter=$'\t'</code>: Tells <code>fzf</code> that tabs separate our fields (Field 1 = Title, Field 2 = File path).</li>
+<li><code>--with-nth=1</code>: Tells <code>fzf</code> to <strong>only show Field 1 (Title)</strong> in the search menu.</li>
+<li><code>--tiebreak=index</code>: Keeps your most recently modified notes at the top when search results have equal match scores.</li>
+<li><code>--preview 'head -n 30 {2}'</code>: Tells <code>fzf</code> to preview the first 30 lines of Field 2 (the file path) in the preview window.</li>
+</ul>
+<p>Run this command in your terminal:</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db \
+  &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC LIMIT 10;&quot; \
+  | tr -d '&quot;' \
+  | fzf --delimiter=$'\t' --with-nth=1 --tiebreak=index --preview 'head -n 30 {2}' --preview-window=right:50%:wrap
+
+</code></pre>
+<h3>What to check:</h3>
+<ol>
+<li>Does <code>fzf</code> display <strong>only</strong> the note titles in the left/main selection area?</li>
+<li>Does moving up and down with arrow keys or <code>C-n</code>/<code>C-p</code> update the right-side preview pane with the contents of that Org file?</li>
+<li>When you press <code>Enter</code> to select a note, does <code>fzf</code> exit cleanly and print <code>Title [tab] Path</code> to your terminal?</li>
+</ol>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134414_capture.md&quot;)</p>
+<hr />
+<h1>PROMPT 7</h1>
+<p>things look good.  not sure how I would be able to tell if a tab was printed to the terminal vs a space.  in emacs I know describe-char.  in xfce4-terminal I would not know of a way to get at that detail.</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134416_capture.md&quot;)</p>
+<hr />
+<h1>RESPONSE 7</h1>
+<p>You can easily inspect invisible characters in your terminal by piping the selection output through <code>cat -A</code> (or <code>cat -v -T</code>).</p>
+<p>In standard Linux utilities:</p>
+<ul>
+<li><code>cat -A</code> shows tabs as <strong><code>^I</code></strong> and line endings as <strong><code>$</code></strong>.</li>
+<li>If a space were present instead, you would see a literal blank space.</li>
+</ul>
+<hr />
+<h3>Step 4: Verify the Output Characters</h3>
+<p>Run this command in your terminal to select a note and inspect the exact hidden delimiter:</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db \
+  &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC LIMIT 5;&quot; \
+  | tr -d '&quot;' \
+  | fzf --delimiter=$'\t' --with-nth=1 \
+  | cat -A
+
+</code></pre>
+<ul>
+<li><strong>What to look for:</strong> After hitting <code>Enter</code> on a selection, you should see output formatted like:</li>
+</ul>
+<pre><code class="language-text">My Note Title^I/home/dad84/Documents/RoamNotes/20260107114920-note.org$
+
+</code></pre>
+<p>The <strong><code>^I</code></strong> explicitly proves that <code>sqlite3</code> and <code>fzf</code> are passing a raw ASCII Tab character (<code>\t</code>).</p>
+<hr />
+<h3>Step 5: Final Script Assembly</h3>
+<p>Now that the SQL query, text cleanup, <code>fzf</code> field indexing, preview window, and character separation are all verified, assemble your final executable script:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+
+DB_PATH=&quot;${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db&quot;
+[[ ! -f &quot;$DB_PATH&quot; ]] &amp;&amp; DB_PATH=&quot;$HOME/.emacs.d/org-roam.db&quot;
+
+if [[ ! -f &quot;$DB_PATH&quot; ]]; then
+    echo &quot;Error: Org-roam database not found at $DB_PATH&quot; &gt;&amp;2
+    exit 1
+fi
+
+# 1. Fetch title and file path joined on mtime DESC
+# 2. Clean literal quotes
+# 3. Present titles in fzf with tiebreak by index and live preview
+SELECTION=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; \
+    &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC;&quot; \
+    | tr -d '&quot;' \
+    | fzf --delimiter=$'\t' \
+          --with-nth=1 \
+          --tiebreak=index \
+          --preview 'head -n 30 {2}' \
+          --preview-window=right:50%:wrap)
+
+if [[ -n &quot;$SELECTION&quot; ]]; then
+    # Extract field 2 (the file path) after the tab delimiter
+    FILE=$(echo &quot;$SELECTION&quot; | cut -f2)
+    emacsclient -n &quot;$FILE&quot;
+fi
+
+</code></pre>
+<p>Save this to <code>~/bin/roam-find</code> (or <code>~/.local/bin/roam-find</code>), make it executable (<code>chmod +x ~/bin/roam-find</code>), and you have a standalone, zero-lag Org-roam launcher for your desktop.</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134426_capture.md&quot;)</p>
+<hr />
