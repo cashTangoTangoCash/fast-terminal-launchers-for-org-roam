@@ -128,3 +128,56 @@ fi
 </code></pre>
 <p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260901_234027_capture.md&quot;)</p>
 <hr />
+<h1>PROMPT 3</h1>
+<p>seems to be working and is very cool.  now what if we wanted to see the most recently edited/modified nodes in fzf at the top, rather than sorted by node title?</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134248_capture.md&quot;)</p>
+<hr />
+<h1>RESPONSE 3</h1>
+<p>To rank your most recently modified notes at the top, you can adjust the query to sort by the file's modification time stored in Org-roam's database (<code>mtime</code>), or explicitly instruct <code>fzf</code> not to re-sort the incoming stream.</p>
+<p>Org-roam tracks the last modified timestamp in the <code>mtime</code> column of the <code>files</code> table (or derived on the <code>nodes</code> table). Sorting directly by <code>mtime DESC</code> in SQLite ensures the most recently updated notes hit the top of your list immediately.</p>
+<hr />
+<h3>Step 1: Updating the SQL Query</h3>
+<p>Modify the SQLite <code>ORDER BY</code> clause to target <code>mtime</code> in descending order (<code>DESC</code>):</p>
+<pre><code class="language-sql">SELECT title, file FROM nodes WHERE title IS NOT NULL AND title != '' ORDER BY mtime DESC;
+
+</code></pre>
+<hr />
+<h3>Step 2: Preserving Order in <code>fzf</code> (<code>--no-sort</code>)</h3>
+<p>By default, as soon as you start typing a search query in <code>fzf</code>, it re-ranks items by fuzzy-match score. To ensure that your <strong>initial view</strong> (before typing) presents your most recently edited files at the top, add the <code>--no-sort</code> flag, or keep standard fuzzy matching for active queries while preserving the default SQL ordering on launch.</p>
+<hr />
+<h3>Updated <code>roam-find</code> Script</h3>
+<p>Here is the complete updated script sorting by recent modification time:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+
+DB_PATH=&quot;${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db&quot;
+[[ ! -f &quot;$DB_PATH&quot; ]] &amp;&amp; DB_PATH=&quot;$HOME/.emacs.d/org-roam.db&quot;
+
+if [[ ! -f &quot;$DB_PATH&quot; ]]; then
+    echo &quot;Error: Org-roam database not found at $DB_PATH&quot; &gt;&amp;2
+    exit 1
+fi
+
+# 1. Fetch title and file path, ORDER BY mtime DESC (newest first)
+# 2. Strip surrounding quotes
+# 3. Pass clean stream to fzf
+SELECTION=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; \
+    &quot;SELECT title, file FROM nodes WHERE title IS NOT NULL AND title != '' ORDER BY mtime DESC;&quot; \
+    | tr -d '&quot;' \
+    | fzf --delimiter=$'\t' \
+          --with-nth=1 \
+          --tiebreak=index \
+          --preview 'head -n 30 {2}' \
+          --preview-window=right:50%:wrap)
+
+if [[ -n &quot;$SELECTION&quot; ]]; then
+    FILE=$(echo &quot;$SELECTION&quot; | cut -f2)
+    emacsclient -n &quot;$FILE&quot;
+fi
+
+</code></pre>
+<h3>Key Change to Note</h3>
+<ul>
+<li><strong><code>--tiebreak=index</code></strong>: When <code>fzf</code> finds multiple equal fuzzy matches for a search term, <code>--tiebreak=index</code> tells it to prioritize items higher up in the original input stream (which means your more recently modified notes break ties!).</li>
+</ul>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134256_capture.md&quot;)</p>
+<hr />
