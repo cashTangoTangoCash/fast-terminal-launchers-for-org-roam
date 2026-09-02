@@ -1,0 +1,66 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>RESPONSE 2</h1>
+<p><strong><a href="20260901_234021_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | End →</strong></p>
+<hr />
+<p>The extra escaped quotes (<code>&quot;</code>) around the file path in the SQLite output are tripping up <code>head</code>. When <code>sqlite3</code> exports strings containing certain characters or formatting, it often wraps the column value in literal quotation marks, so <code>fzf</code> receives <code>'&quot;/home/dad84/...&quot;'</code> instead of <code>/home/dad84/...</code>.</p>
+<p>Deconstructing that line step-by-step makes it easy to isolate and verify each stage directly in your shell.</p>
+<hr />
+<h3>Step 1: Check the Raw Database Output</h3>
+<p>First, test what <code>sqlite3</code> actually prints for titles and file paths.</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db &quot;SELECT title, file FROM nodes WHERE title IS NOT NULL AND title != '' LIMIT 5;&quot;
+
+</code></pre>
+<ul>
+<li><strong>What to look for:</strong> Look closely at the second column (the file path). If you see literal double quotes wrapping the path (e.g., <code>&quot;/home/dad84/...&quot;</code>), that's the culprit.</li>
+</ul>
+<hr />
+<h3>Step 2: Strip Quotes and Clean the Output</h3>
+<p>To clean those extra quotes before <code>fzf</code> gets them, pipe the output through <code>tr</code> or <code>sed</code> to remove double quotes (<code>&quot;</code>):</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db &quot;SELECT title, file FROM nodes WHERE title IS NOT NULL AND title != '' LIMIT 5;&quot; | tr -d '&quot;'
+
+</code></pre>
+<ul>
+<li><strong>What to look for:</strong> The paths should now be clean, unquoted strings like <code>/home/dad84/Documents/RoamNotes/20260107114920-bashrc_file.org</code>.</li>
+</ul>
+<hr />
+<h3>Step 3: Test <code>fzf</code> Field Splitting and Preview Separately</h3>
+<p><code>fzf</code> uses <code>{2}</code> to reference the second field (the path) based on <code>--delimiter=$'\t'</code>. Now test <code>fzf</code> with a small batch of clean data:</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db &quot;SELECT title, file FROM nodes WHERE title IS NOT NULL AND title != '' LIMIT 10;&quot; \
+  | tr -d '&quot;' \
+  | fzf --delimiter=$'\t' --with-nth=1 --preview 'head -n 30 {2}'
+
+</code></pre>
+<ul>
+<li><strong>What to look for:</strong> As you move up and down in <code>fzf</code>, the right pane should now successfully read field <code>{2}</code> and render the first 30 lines of the org file.</li>
+</ul>
+<hr />
+<h3>The Fixed Script</h3>
+<p>Applying <code>tr -d '&quot;'</code> directly to the SQLite output before handing it to <code>fzf</code> resolves the preview error and simplifies extracting the file path at the end:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+
+DB_PATH=&quot;${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db&quot;
+[[ ! -f &quot;$DB_PATH&quot; ]] &amp;&amp; DB_PATH=&quot;$HOME/.emacs.d/org-roam.db&quot;
+
+if [[ ! -f &quot;$DB_PATH&quot; ]]; then
+    echo &quot;Error: Org-roam database not found at $DB_PATH&quot; &gt;&amp;2
+    exit 1
+fi
+
+# 1. Fetch title and file path
+# 2. Strip surrounding literal quotes
+# 3. Pass clean fields to fzf
+SELECTION=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; \
+    &quot;SELECT title, file FROM nodes WHERE title IS NOT NULL AND title != '' ORDER BY title;&quot; \
+    | tr -d '&quot;' \
+    | fzf --delimiter=$'\t' --with-nth=1 --preview 'head -n 30 {2}' --preview-window=right:50%:wrap)
+
+if [[ -n &quot;$SELECTION&quot; ]]; then
+    # Extract field 2 (the cleaned file path)
+    FILE=$(echo &quot;$SELECTION&quot; | cut -f2)
+    emacsclient -n &quot;$FILE&quot;
+fi
+
+</code></pre>
+<hr />
+<p><strong><a href="20260901_234021_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | End →</strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260901_234027_capture.md&quot;)</p>
