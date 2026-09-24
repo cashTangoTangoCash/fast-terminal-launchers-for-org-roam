@@ -1,0 +1,50 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>RESPONSE 8</h1>
+<p><strong><a href="20260924_153415_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | End →</strong></p>
+<hr />
+<p>Here is the updated script with <code>--exact</code> added to <code>fzf</code> and a <code>message</code> printout at the end to log the visited node's title in your terminal history:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+
+DB_PATH=&quot;${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db&quot;
+[[ ! -f &quot;$DB_PATH&quot; ]] &amp;&amp; DB_PATH=&quot;$HOME/.emacs.d/org-roam.db&quot;
+
+if [[ ! -f &quot;$DB_PATH&quot; ]]; then
+    echo &quot;Error: Org-roam database not found at $DB_PATH&quot; &gt;&amp;2
+    exit 1
+fi
+
+# 1. Fetch title and file path joined on mtime DESC
+# 2. Clean literal quotes
+# 3. Present titles in fzf with exact matching, tiebreak by index, and live preview
+SELECTION=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; \
+    &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC;&quot; \
+    | tr -d '&quot;' \
+    | fzf --exact \
+          --delimiter=$'\t' \
+          --with-nth=1 \
+          --tiebreak=index \
+          --preview 'head -n 30 {2}' \
+          --preview-window=right:50%:wrap)
+
+if [[ -n &quot;$SELECTION&quot; ]]; then
+    # Separate field 1 (Title) and field 2 (File path)
+    TITLE=$(echo &quot;$SELECTION&quot; | cut -f1)
+    FILE=$(echo &quot;$SELECTION&quot; | cut -f2)
+
+    # Open in Emacs
+    emacsclient -n &quot;$FILE&quot;
+
+    # Print record to terminal
+    echo &quot;Visited node: \&quot;$TITLE\&quot;&quot;
+fi
+
+</code></pre>
+<h3>What Changed</h3>
+<ol>
+<li><strong>Added <code>--exact</code> to <code>fzf</code>:</strong> Enforces substring matching instead of default fuzzy matching when typing search queries.</li>
+<li><strong>Extracted <code>TITLE</code>:</strong> <code>cut -f1</code> extracts field 1 from the tab-separated selection.</li>
+<li><strong>Terminal Log:</strong> Prints <code>Visited node: &quot;Your Note Title&quot;</code> right before the script exits, leaving a clear trail in your shell scrollback buffer.</li>
+</ol>
+<hr />
+<p><strong><a href="20260924_153415_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | End →</strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260924_153419_capture.md&quot;)</p>

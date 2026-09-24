@@ -377,3 +377,53 @@ fi
 <p>Save this to <code>~/bin/roam-find</code> (or <code>~/.local/bin/roam-find</code>), make it executable (<code>chmod +x ~/bin/roam-find</code>), and you have a standalone, zero-lag Org-roam launcher for your desktop.</p>
 <p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134426_capture.md&quot;)</p>
 <hr />
+<h1>PROMPT 8</h1>
+<p>let's make one change to this script.  have it print out which node we visited (i.e. print out the title of that node).  that way, there is a visual record in the terminal of where we went last.  also add --exact to fzf.</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260924_153415_capture.md&quot;)</p>
+<hr />
+<h1>RESPONSE 8</h1>
+<p>Here is the updated script with <code>--exact</code> added to <code>fzf</code> and a <code>message</code> printout at the end to log the visited node's title in your terminal history:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+
+DB_PATH=&quot;${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db&quot;
+[[ ! -f &quot;$DB_PATH&quot; ]] &amp;&amp; DB_PATH=&quot;$HOME/.emacs.d/org-roam.db&quot;
+
+if [[ ! -f &quot;$DB_PATH&quot; ]]; then
+    echo &quot;Error: Org-roam database not found at $DB_PATH&quot; &gt;&amp;2
+    exit 1
+fi
+
+# 1. Fetch title and file path joined on mtime DESC
+# 2. Clean literal quotes
+# 3. Present titles in fzf with exact matching, tiebreak by index, and live preview
+SELECTION=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; \
+    &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC;&quot; \
+    | tr -d '&quot;' \
+    | fzf --exact \
+          --delimiter=$'\t' \
+          --with-nth=1 \
+          --tiebreak=index \
+          --preview 'head -n 30 {2}' \
+          --preview-window=right:50%:wrap)
+
+if [[ -n &quot;$SELECTION&quot; ]]; then
+    # Separate field 1 (Title) and field 2 (File path)
+    TITLE=$(echo &quot;$SELECTION&quot; | cut -f1)
+    FILE=$(echo &quot;$SELECTION&quot; | cut -f2)
+
+    # Open in Emacs
+    emacsclient -n &quot;$FILE&quot;
+
+    # Print record to terminal
+    echo &quot;Visited node: \&quot;$TITLE\&quot;&quot;
+fi
+
+</code></pre>
+<h3>What Changed</h3>
+<ol>
+<li><strong>Added <code>--exact</code> to <code>fzf</code>:</strong> Enforces substring matching instead of default fuzzy matching when typing search queries.</li>
+<li><strong>Extracted <code>TITLE</code>:</strong> <code>cut -f1</code> extracts field 1 from the tab-separated selection.</li>
+<li><strong>Terminal Log:</strong> Prints <code>Visited node: &quot;Your Note Title&quot;</code> right before the script exits, leaving a clear trail in your shell scrollback buffer.</li>
+</ol>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260924_153419_capture.md&quot;)</p>
+<hr />
