@@ -1,0 +1,63 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>RESPONSE 7</h1>
+<p><strong><a href="20260902_134416_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | End →</strong></p>
+<hr />
+<p>You can easily inspect invisible characters in your terminal by piping the selection output through <code>cat -A</code> (or <code>cat -v -T</code>).</p>
+<p>In standard Linux utilities:</p>
+<ul>
+<li><code>cat -A</code> shows tabs as <strong><code>^I</code></strong> and line endings as <strong><code>$</code></strong>.</li>
+<li>If a space were present instead, you would see a literal blank space.</li>
+</ul>
+<hr />
+<h3>Step 4: Verify the Output Characters</h3>
+<p>Run this command in your terminal to select a note and inspect the exact hidden delimiter:</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db \
+  &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC LIMIT 5;&quot; \
+  | tr -d '&quot;' \
+  | fzf --delimiter=$'\t' --with-nth=1 \
+  | cat -A
+
+</code></pre>
+<ul>
+<li><strong>What to look for:</strong> After hitting <code>Enter</code> on a selection, you should see output formatted like:</li>
+</ul>
+<pre><code class="language-text">My Note Title^I/home/dad84/Documents/RoamNotes/20260107114920-note.org$
+
+</code></pre>
+<p>The <strong><code>^I</code></strong> explicitly proves that <code>sqlite3</code> and <code>fzf</code> are passing a raw ASCII Tab character (<code>\t</code>).</p>
+<hr />
+<h3>Step 5: Final Script Assembly</h3>
+<p>Now that the SQL query, text cleanup, <code>fzf</code> field indexing, preview window, and character separation are all verified, assemble your final executable script:</p>
+<pre><code class="language-bash">#!/usr/bin/env bash
+
+DB_PATH=&quot;${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db&quot;
+[[ ! -f &quot;$DB_PATH&quot; ]] &amp;&amp; DB_PATH=&quot;$HOME/.emacs.d/org-roam.db&quot;
+
+if [[ ! -f &quot;$DB_PATH&quot; ]]; then
+    echo &quot;Error: Org-roam database not found at $DB_PATH&quot; &gt;&amp;2
+    exit 1
+fi
+
+# 1. Fetch title and file path joined on mtime DESC
+# 2. Clean literal quotes
+# 3. Present titles in fzf with tiebreak by index and live preview
+SELECTION=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; \
+    &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC;&quot; \
+    | tr -d '&quot;' \
+    | fzf --delimiter=$'\t' \
+          --with-nth=1 \
+          --tiebreak=index \
+          --preview 'head -n 30 {2}' \
+          --preview-window=right:50%:wrap)
+
+if [[ -n &quot;$SELECTION&quot; ]]; then
+    # Extract field 2 (the file path) after the tab delimiter
+    FILE=$(echo &quot;$SELECTION&quot; | cut -f2)
+    emacsclient -n &quot;$FILE&quot;
+fi
+
+</code></pre>
+<p>Save this to <code>~/bin/roam-find</code> (or <code>~/.local/bin/roam-find</code>), make it executable (<code>chmod +x ~/bin/roam-find</code>), and you have a standalone, zero-lag Org-roam launcher for your desktop.</p>
+<hr />
+<p><strong><a href="20260902_134416_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | End →</strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134426_capture.md&quot;)</p>

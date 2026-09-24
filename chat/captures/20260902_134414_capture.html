@@ -1,0 +1,31 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>RESPONSE 6</h1>
+<p><strong><a href="20260902_134406_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260902_134416_capture.html">Next →</a></strong></p>
+<hr />
+<p>Great! Seeing that table layout means the SQL join and ordering are working as expected.</p>
+<p>The reason <code>sqlite3</code> without <code>-separator</code> prints a nice table is that it defaults to column output when interactive. Adding <code>-separator $'\t'</code> turns it into plain tab-separated values, which is necessary so <code>fzf</code> can split the title from the file path.</p>
+<hr />
+<h3>Step 3: Test <code>fzf</code> Integration</h3>
+<p>Now we test piping that tab-separated output into <code>fzf</code>. We'll use:</p>
+<ul>
+<li><code>--delimiter=$'\t'</code>: Tells <code>fzf</code> that tabs separate our fields (Field 1 = Title, Field 2 = File path).</li>
+<li><code>--with-nth=1</code>: Tells <code>fzf</code> to <strong>only show Field 1 (Title)</strong> in the search menu.</li>
+<li><code>--tiebreak=index</code>: Keeps your most recently modified notes at the top when search results have equal match scores.</li>
+<li><code>--preview 'head -n 30 {2}'</code>: Tells <code>fzf</code> to preview the first 30 lines of Field 2 (the file path) in the preview window.</li>
+</ul>
+<p>Run this command in your terminal:</p>
+<pre><code class="language-bash">sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db \
+  &quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC LIMIT 10;&quot; \
+  | tr -d '&quot;' \
+  | fzf --delimiter=$'\t' --with-nth=1 --tiebreak=index --preview 'head -n 30 {2}' --preview-window=right:50%:wrap
+
+</code></pre>
+<h3>What to check:</h3>
+<ol>
+<li>Does <code>fzf</code> display <strong>only</strong> the note titles in the left/main selection area?</li>
+<li>Does moving up and down with arrow keys or <code>C-n</code>/<code>C-p</code> update the right-side preview pane with the contents of that Org file?</li>
+<li>When you press <code>Enter</code> to select a note, does <code>fzf</code> exit cleanly and print <code>Title [tab] Path</code> to your terminal?</li>
+</ol>
+<hr />
+<p><strong><a href="20260902_134406_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260902_134416_capture.html">Next →</a></strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134414_capture.md&quot;)</p>

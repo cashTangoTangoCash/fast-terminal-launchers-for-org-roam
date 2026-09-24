@@ -1,0 +1,12 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>PROMPT 5</h1>
+<p><strong><a href="20260902_134359_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260902_134404_capture.html">Next →</a></strong></p>
+<hr />
+<p>ok, let's go step by step together:</p>
+<p>[dad84@dad84-2013PC ~]$ sqlite3 ~/.emacs.d/org-roam.db &quot;.schema nodes&quot;
+sqlite3 ~/.emacs.d/org-roam.db &quot;.schema files&quot;
+CREATE TABLE nodes (id NOT NULL PRIMARY KEY, file NOT NULL, level NOT NULL, pos NOT NULL, todo , priority , scheduled text, deadline text, title , properties , olp , FOREIGN KEY (file) REFERENCES files (file) ON DELETE CASCADE);
+CREATE TABLE files (file UNIQUE PRIMARY KEY, title , hash NOT NULL, atime NOT NULL, mtime NOT NULL);</p>
+<hr />
+<p><strong><a href="20260902_134359_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260902_134404_capture.html">Next →</a></strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260902_134401_capture.md&quot;)</p>

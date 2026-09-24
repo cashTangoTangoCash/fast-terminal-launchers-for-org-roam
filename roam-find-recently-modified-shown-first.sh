@@ -14,7 +14,7 @@ fi
 SELECTION=$(sqlite3 -separator $'\t' "$DB_PATH" \
     "SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != '' ORDER BY files.mtime DESC;" \
     | tr -d '"' \
-    | fzf --delimiter=$'\t' \
+    | fzf --exact --delimiter=$'\t' \
           --with-nth=1 \
           --tiebreak=index \
           --preview 'head -n 30 {2}' \
