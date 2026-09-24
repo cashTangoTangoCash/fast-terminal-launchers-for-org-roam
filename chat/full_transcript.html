@@ -427,3 +427,103 @@ fi
 </ol>
 <p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260924_153419_capture.md&quot;)</p>
 <hr />
+<h1>PROMPT 9</h1>
+<p>now let's have the script take an optional command line input which is the node title.  maybe things are getting a little too tricky here, but if there is one match, visit it in emacs (and print what we did to terminal).  if there are multiple matches, we use fzf with preview to choose, then proceed as before.  this might be overdoing it but let's try and see what happens.  the appeal of this would be if the user is going to the same node over and over lately, and in the terminal can use ctrl-r and a snippet of the node name to call up the command to visit that node.</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260924_154442_capture.md&quot;)</p>
+<hr />
+<h1>RESPONSE 9</h1>
+<p>That is actually a very clean pattern for CLI utilities—it gives you an instant direct hit when your search string is unique, while falling back gracefully to <code>fzf</code> when there is ambiguity.</p>
+<p>To implement this, we can pass your positional argument <code>$1</code> into the SQLite query as a <code>LIKE</code> filter. Using SQLite's <code>COUNT(*)</code> or array matching in Bash tells us whether we got 0, 1, or multiple matches.</p>
+<hr />
+<h3>The Logic Breakdown</h3>
+<ol>
+<li><strong>No arguments provided (<code>$1</code> is empty):</strong> Behave as before—stream all notes ordered by <code>mtime DESC</code> directly into <code>fzf</code>.</li>
+<li><strong>Argument provided (<code>$1</code> is given):</strong> Query SQLite with <code>WHERE nodes.title LIKE '%$1%'</code>.</li>
+</ol>
+<ul>
+<li><strong>If exactly 1 match:</strong> Skip <code>fzf</code> completely, send the file directly to <code>emacsclient</code>, and print the confirmation.</li>
+<li><strong>If multiple matches:</strong> Pass those matches to <code>fzf</code> with <code>$1</code> pre-seeded as the initial search query (<code>--query=&quot;$1&quot;</code>).</li>
+<li><strong>If 0 matches:</strong> Print an error message stating no nodes matched the query and exit cleanly.</li>
+</ul>
+<hr />
+<h3>The Updated Script (<code>roam-find</code>)</h3>
+<pre><code class="language-bash">#!/usr/bin/env bash
+
+DB_PATH=&quot;${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db&quot;
+[[ ! -f &quot;$DB_PATH&quot; ]] &amp;&amp; DB_PATH=&quot;$HOME/.emacs.d/org-roam.db&quot;
+
+if [[ ! -f &quot;$DB_PATH&quot; ]]; then
+    echo &quot;Error: Org-roam database not found at $DB_PATH&quot; &gt;&amp;2
+    exit 1
+fi
+
+SEARCH_TERM=&quot;$1&quot;
+
+# Base SQL query
+BASE_SQL=&quot;SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != ''&quot;
+
+if [[ -z &quot;$SEARCH_TERM&quot; ]]; then
+    # --- CASE 1: No arguments passed, load all nodes into fzf ---
+    QUERY=&quot;$BASE_SQL ORDER BY files.mtime DESC;&quot;
+    RESULTS=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; &quot;$QUERY&quot; | tr -d '&quot;')
+else
+    # --- CASE 2: Argument passed, filter in SQLite first ---
+    # Escape single quotes in user input for SQL safety
+    SAFE_TERM=&quot;${SEARCH_TERM//\'/\'\'}&quot;
+    QUERY=&quot;$BASE_SQL AND nodes.title LIKE '%$SAFE_TERM%' ORDER BY files.mtime DESC;&quot;
+    RESULTS=$(sqlite3 -separator $'\t' &quot;$DB_PATH&quot; &quot;$QUERY&quot; | tr -d '&quot;')
+fi
+
+# Count how many matching lines were returned
+MATCH_COUNT=$(echo &quot;$RESULTS&quot; | sed '/^$/d' | wc -l)
+
+if [[ $MATCH_COUNT -eq 0 ]]; then
+    echo &quot;No Org-roam nodes matching: \&quot;$SEARCH_TERM\&quot;&quot; &gt;&amp;2
+    exit 1
+
+elif [[ $MATCH_COUNT -eq 1 ]]; then
+    # --- Direct Hit: Open immediately without opening fzf ---
+    SELECTION=&quot;$RESULTS&quot;
+
+else
+    # --- Multiple Matches (or full list): Interactive selection via fzf ---
+    SELECTION=$(echo &quot;$RESULTS&quot; \
+        | fzf --exact \
+              --delimiter=$'\t' \
+              --with-nth=1 \
+              --tiebreak=index \
+              ${SEARCH_TERM:+--query=&quot;$SEARCH_TERM&quot;} \
+              --preview 'head -n 30 {2}' \
+              --preview-window=right:50%:wrap)
+fi
+
+# Open selected node if a choice was made
+if [[ -n &quot;$SELECTION&quot; ]]; then
+    TITLE=$(echo &quot;$SELECTION&quot; | cut -f1)
+    FILE=$(echo &quot;$SELECTION&quot; | cut -f2)
+
+    emacsclient -n &quot;$FILE&quot;
+    echo &quot;Visited node: \&quot;$TITLE\&quot;&quot;
+fi
+
+</code></pre>
+<hr />
+<h3>How to Test It</h3>
+<ol>
+<li><strong>Test Direct Hit:</strong>
+Pick a unique word in one of your note titles:</li>
+</ol>
+<pre><code class="language-bash">roam-find bashrc
+
+</code></pre>
+<p><em>Expectation:</em> Opens Emacs instantly without showing <code>fzf</code> at all, printing <code>Visited node: &quot;bashrc file&quot;</code> to the terminal.
+2. <strong>Test Multiple Hits:</strong>
+Pass a generic word shared by multiple notes:</p>
+<pre><code class="language-bash">roam-find project
+
+</code></pre>
+<p><em>Expectation:</em> Opens <code>fzf</code> pre-filtered with those matching notes, allowing you to pick one with the live preview pane.
+3. <strong>Test Reverse-i-search (<code>Ctrl-r</code>):</strong>
+Now you can hit <code>Ctrl-r</code>, type <code>roam-find bashrc</code>, hit <code>Enter</code>, and land directly on that node in Emacs in under 10 milliseconds.</p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260924_154448_capture.md&quot;)</p>
+<hr />
