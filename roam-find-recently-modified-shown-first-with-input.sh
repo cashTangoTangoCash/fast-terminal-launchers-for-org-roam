@@ -13,7 +13,7 @@ show_brief_help() {
     cat << 'EOF'
 Usage: roam-find [OPTION] [SEARCH_TERM]
 
-Instantly search and open Org-roam nodes in Emacs using SQLite and fzf.
+Instantly search and open pre-existing Org-roam nodes in Emacs using SQLite and fzf.
 
 Options:
   -h, --help           Show this brief command-line help message and exit.

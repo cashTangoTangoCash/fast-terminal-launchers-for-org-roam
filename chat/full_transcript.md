@@ -1262,3 +1262,329 @@ This bridges your shell script and Emacs workflow, giving you the best of both w
 Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_124824_capture.md")
 
 ---
+
+# PROMPT 15
+one tweak for roam-insert: add a newline after the inserted roam link in the emacs buffer.  this is the most common situation for me - roam links that occupy their own lines.
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_125729_capture.md")
+
+---
+
+# RESPONSE 15
+To append a newline directly after the link, you can add `\n` to the Elisp string inside `emacsclient`.
+
+Because `\n` lives inside an Elisp string passed through a double-quoted Bash string, escaping it as `\\n` ensures Bash passes a literal `\n` to Emacs rather than a raw newline break in the terminal command.
+
+---
+
+### Updated `roam-insert` Script
+
+Here is the updated script with `\\n` included in the inserted text:
+
+```bash
+#!/usr/bin/env bash
+
+# Paths
+DB_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db"
+[[ ! -f "$DB_PATH" ]] && DB_PATH="$HOME/.emacs.d/org-roam.db"
+
+# Check database existence
+if [[ ! -f "$DB_PATH" ]]; then
+    echo "Error: Org-roam database not found at $DB_PATH" >&2
+    exit 1
+fi
+
+SEARCH_TERM="$1"
+BASE_SQL="SELECT nodes.title, nodes.id, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != ''"
+
+if [[ -z "$SEARCH_TERM" ]]; then
+    # Case 1: No query passed -> load all nodes ordered by recent mtime
+    QUERY="$BASE_SQL ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+else
+    # Case 2: Query passed -> filter in SQLite
+    SAFE_TERM="${SEARCH_TERM//\'/\'\'}"
+    QUERY="$BASE_SQL AND nodes.title LIKE '%$SAFE_TERM%' ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+fi
+
+MATCH_COUNT=$(echo "$RESULTS" | sed '/^$/d' | wc -l)
+
+if [[ $MATCH_COUNT -eq 0 ]]; then
+    echo "No Org-roam nodes matching: \"$SEARCH_TERM\"" >&2
+    exit 1
+
+elif [[ $MATCH_COUNT -eq 1 ]]; then
+    # Single match -> pick directly
+    SELECTION="$RESULTS"
+
+else
+    # Multiple matches -> launch fzf interface
+    SELECTION=$(echo "$RESULTS" \
+        | fzf --exact \
+              --delimiter=$'\t' \
+              --with-nth=1 \
+              --tiebreak=index \
+              ${SEARCH_TERM:+--query="$SEARCH_TERM"} \
+              --preview 'head -n 30 {3}' \
+              --preview-window=right:50%:wrap)
+fi
+
+# Process selection and insert link into active Emacs buffer
+if [[ -n "$SELECTION" ]]; then
+    TITLE=$(echo "$SELECTION" | cut -f1)
+    ID=$(echo "$SELECTION" | cut -f2)
+    FILE=$(echo "$SELECTION" | cut -f3)
+
+    # 1. Check if the target node file actually exists on disk
+    if [[ ! -f "$FILE" ]]; then
+        echo "Error: Node file does not exist on disk: $FILE" >&2
+        exit 1
+    fi
+
+    # 2. Format as standard Org-roam ID link
+    ORG_LINK="[[id:${ID}][${TITLE}]]"
+
+    # 3. Escape double quotes in link for Elisp evaluation
+    SAFE_LINK="${ORG_LINK//\"/\\\"}"
+
+    # 4. Insert link + newline (\\n) into current focused Emacs buffer at point
+    emacsclient -e "(with-current-buffer (window-buffer (selected-window)) (insert \"$SAFE_LINK\\n\"))" > /dev/null
+
+    echo "Inserted Org-roam link: $ORG_LINK"
+fi
+
+```
+
+### What Changed
+
+Line 62 now reads:
+
+```bash
+emacsclient -e "(with-current-buffer (window-buffer (selected-window)) (insert \"$SAFE_LINK\\n\"))" > /dev/null
+
+```
+
+When evaluated by Emacs, `(insert "[[id:...][...]]\n")` places the link and immediately drops your cursor down to a fresh line below it.
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_125733_capture.md")
+
+---
+
+# PROMPT 16
+now just as with roam-find, let's add help capability to roam-insert.  -h, --help for brief help and -v, --verbose-help with standalone roam-insert-verbose-help.md (longer help with simple concrete usage examples).  BTW the name of the roam-insert script is roam-insert-recently-modified-shown-first-with-input.sh (maybe too long but it makes sense to me for now).
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_131316_capture.md")
+
+---
+
+# RESPONSE 16
+Here is the updated `roam-insert-recently-modified-shown-first-with-input.sh` script with built-in `-h`/`--help` and `-v`/`--verbose-help` handling, along with the accompanying standalone Markdown documentation.
+
+---
+
+### 1. The Updated Script
+
+```bash
+#!/usr/bin/env bash
+
+# Paths
+DB_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db"
+[[ ! -f "$DB_PATH" ]] && DB_PATH="$HOME/.emacs.d/org-roam.db"
+
+# Path for verbose help file
+HELP_FILE="$HOME/.local/share/roam-insert/roam-insert-verbose-help.md"
+
+# --- HELP HANDLERS ---
+
+show_brief_help() {
+    cat << 'EOF'
+Usage: roam-insert-recently-modified-shown-first-with-input.sh [OPTION] [SEARCH_TERM]
+
+Instantly select an Org-roam node and insert an Org-mode ID link into your 
+active Emacs buffer, appending a newline.
+
+Options:
+  -h, --help           Show this brief command-line help message and exit.
+  -v, --verbose-help   Open the full Markdown manual in Emacs.
+
+Examples:
+  roam-insert-recently-modified-shown-first-with-input.sh
+      Interactive search through all nodes (sorted by mtime).
+
+  roam-insert-recently-modified-shown-first-with-input.sh "bashrc"
+      Direct hit or pre-filtered fzf search for "bashrc".
+EOF
+}
+
+show_verbose_help() {
+    if [[ -f "$HELP_FILE" ]]; then
+        emacsclient -n "$HELP_FILE"
+        echo "Opened verbose documentation in Emacs: $HELP_FILE"
+    else
+        echo "Error: Verbose help file not found at $HELP_FILE" >&2
+        exit 1
+    fi
+}
+
+# Parse options
+case "$1" in
+    -h|--help)
+        show_brief_help
+        exit 0
+        ;;
+    -v|--verbose-help)
+        show_verbose_help
+        exit 0
+        ;;
+esac
+
+# Check database existence
+if [[ ! -f "$DB_PATH" ]]; then
+    echo "Error: Org-roam database not found at $DB_PATH" >&2
+    exit 1
+fi
+
+SEARCH_TERM="$1"
+BASE_SQL="SELECT nodes.title, nodes.id, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != ''"
+
+if [[ -z "$SEARCH_TERM" ]]; then
+    # Case 1: No query passed -> load all nodes ordered by recent mtime
+    QUERY="$BASE_SQL ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+else
+    # Case 2: Query passed -> filter in SQLite
+    SAFE_TERM="${SEARCH_TERM//\'/\'\'}"
+    QUERY="$BASE_SQL AND nodes.title LIKE '%$SAFE_TERM%' ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+fi
+
+MATCH_COUNT=$(echo "$RESULTS" | sed '/^$/d' | wc -l)
+
+if [[ $MATCH_COUNT -eq 0 ]]; then
+    echo "No Org-roam nodes matching: \"$SEARCH_TERM\"" >&2
+    exit 1
+
+elif [[ $MATCH_COUNT -eq 1 ]]; then
+    # Single match -> pick directly
+    SELECTION="$RESULTS"
+
+else
+    # Multiple matches -> launch fzf interface
+    SELECTION=$(echo "$RESULTS" \
+        | fzf --exact \
+              --delimiter=$'\t' \
+              --with-nth=1 \
+              --tiebreak=index \
+              ${SEARCH_TERM:+--query="$SEARCH_TERM"} \
+              --preview 'head -n 30 {3}' \
+              --preview-window=right:50%:wrap)
+fi
+
+# Process selection and insert link into active Emacs buffer
+if [[ -n "$SELECTION" ]]; then
+    TITLE=$(echo "$SELECTION" | cut -f1)
+    ID=$(echo "$SELECTION" | cut -f2)
+    FILE=$(echo "$SELECTION" | cut -f3)
+
+    # 1. Check if the target node file actually exists on disk
+    if [[ ! -f "$FILE" ]]; then
+        echo "Error: Node file does not exist on disk: $FILE" >&2
+        exit 1
+    fi
+
+    # 2. Format as standard Org-roam ID link
+    ORG_LINK="[[id:${ID}][${TITLE}]]"
+
+    # 3. Escape double quotes in link for Elisp evaluation
+    SAFE_LINK="${ORG_LINK//\"/\\\"}"
+
+    # 4. Insert link + newline (\\n) into current focused Emacs buffer at point
+    emacsclient -e "(with-current-buffer (window-buffer (selected-window)) (insert \"$SAFE_LINK\\n\"))" > /dev/null
+
+    echo "Inserted Org-roam link: $ORG_LINK"
+fi
+
+```
+
+---
+
+### 2. The Standalone Markdown Help File
+
+First, ensure the directory exists:
+
+```bash
+mkdir -p ~/.local/share/roam-insert/
+
+```
+
+Save the following file as `~/.local/share/roam-insert/roam-insert-verbose-help.md`:
+
+```markdown
+# `roam-insert` Manual & Usage Guide
+
+`roam-insert-recently-modified-shown-first-with-input.sh` is a terminal-native tool that bypasses Elisp completion overhead to query your Org-roam SQLite database directly, select a node using `fzf`, and insert a standard Org-mode ID link into your active Emacs buffer—followed immediately by a newline.
+
+---
+
+## 1. Core Features
+
+- **Direct Hit Routing:** If an argument yields a single unique match, the link is inserted directly into Emacs without popping up `fzf`.
+- **Fast Interactive Filtering:** When multiple matches exist (or no argument is provided), nodes are streamed into `fzf` ordered by most recently modified (`mtime DESC`).
+- **File Validation:** Verifies that the underlying `.org` file exists on disk before attempting to insert the link into Emacs.
+- **Active Buffer Targeting:** Inserts the link into whichever buffer is currently selected in Emacs, placing the cursor on a fresh line below the link (`\n`).
+
+---
+
+## 2. Command Reference
+
+| Command / Option | Action |
+| :--- | :--- |
+| `roam-insert-recently-modified-shown-first-with-input.sh` | Opens interactive `fzf` buffer listing all nodes sorted by most recent edit. |
+| `roam-insert-recently-modified-shown-first-with-input.sh <term>` | Searches for single-word `<term>`. |
+| `roam-insert-recently-modified-shown-first-with-input.sh "<multi word term>"` | Best practice for multi-word titles containing spaces. |
+| `roam-insert-recently-modified-shown-first-with-input.sh -h`, `--help` | Prints concise command-line usage to stdout. |
+| `roam-insert-recently-modified-shown-first-with-input.sh -v`, `--verbose-help` | Opens this Markdown documentation buffer in `emacsclient`. |
+
+---
+
+## 3. Workflow Examples
+
+### Standard Multi-Word Link Insertion
+Place your cursor in your active `.org` buffer in Emacs, then execute from your terminal:
+```bash
+roam-insert-recently-modified-shown-first-with-input.sh "my node title"
+```
+> **Result in Emacs:**
+> ```org
+> [[id:12345678-abcd-1234-abcd-1234567890ab][my node title]]
+> [cursor lands here on a new line]
+> ```
+
+### Single Direct Hit Insertion
+When you know a unique keyword in a node title:
+```bash
+roam-insert-recently-modified-shown-first-with-input.sh bashrc
+```
+> **Behavior:** Bypasses `fzf` entirely and instantly inserts `[[id:...][bashrc file]]` followed by a newline into Emacs.
+
+### Interactive Selection with Filter
+When looking through broader topics:
+```bash
+roam-insert-recently-modified-shown-first-with-input.sh emacs
+```
+> **Behavior:** Opens `fzf` pre-seeded with all matching nodes containing "emacs", showing a 30-line file preview in the right pane. Selecting a node inserts its link and closes the prompt.
+
+---
+
+## 4. Dependencies & Paths
+
+- **Database Path:** `~/.config/emacs/org-roam.db` (or `~/.emacs.d/org-roam.db`)
+- **Help File Path:** `~/.local/share/roam-insert/roam-insert-verbose-help.md`
+- **Required Utilities:** `sqlite3`, `fzf`, `emacsclient`, `tr`, `cut`
+
+```
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_131321_capture.md")
+
+---

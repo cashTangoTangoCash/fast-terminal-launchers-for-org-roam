@@ -4,6 +4,53 @@
 DB_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db"
 [[ ! -f "$DB_PATH" ]] && DB_PATH="$HOME/.emacs.d/org-roam.db"
 
+# Path for verbose help file
+HELP_FILE="$HOME/Documents/2026/20260901-standalone-org-roam/roam-insert-verbose-help.md"
+
+# --- HELP HANDLERS ---
+
+show_brief_help() {
+    cat << 'EOF'
+Usage: roam-insert-recently-modified-shown-first-with-input.sh [OPTION] [SEARCH_TERM]
+
+Instantly select a pre-existing Org-roam node and insert an Org-mode ID link into your 
+active Emacs buffer, appending a newline.
+
+Options:
+  -h, --help           Show this brief command-line help message and exit.
+  -v, --verbose-help   Open the full Markdown manual in Emacs.
+
+Examples:
+  roam-insert-recently-modified-shown-first-with-input.sh
+      Interactive search through all nodes (sorted by mtime).
+
+  roam-insert-recently-modified-shown-first-with-input.sh "bashrc"
+      Direct hit or pre-filtered fzf search for "bashrc".
+EOF
+}
+
+show_verbose_help() {
+    if [[ -f "$HELP_FILE" ]]; then
+        emacsclient -n "$HELP_FILE"
+        echo "Opened verbose documentation in Emacs: $HELP_FILE"
+    else
+        echo "Error: Verbose help file not found at $HELP_FILE" >&2
+        exit 1
+    fi
+}
+
+# Parse options
+case "$1" in
+    -h|--help)
+        show_brief_help
+        exit 0
+        ;;
+    -v|--verbose-help)
+        show_verbose_help
+        exit 0
+        ;;
+esac
+
 # Check database existence
 if [[ ! -f "$DB_PATH" ]]; then
     echo "Error: Org-roam database not found at $DB_PATH" >&2
