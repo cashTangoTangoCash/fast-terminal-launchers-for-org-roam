@@ -1,0 +1,104 @@
+# Fast Terminal Launchers for Org-Roam
+
+Lightweight Bash scripts that query the Org-Roam SQLite database directly via `fzf`, providing instant node navigation and link insertion without Elisp minibuffer lag.
+
+---
+
+## Why These Scripts Exist
+
+As an Org-Roam node database grows—especially past 10,000 nodes—commands like `org-roam-node-find` and `org-roam-node-insert` can start to feel sluggish inside Emacs. Even with garbage collection tweaks, synchronous Elisp string formatting across thousands of nodes often causes brief delays or "spinning clock" pauses when opening the minibuffer.
+
+These scripts bypass the Elisp completion layer entirely. By querying SQLite directly and streaming results into `fzf` in the terminal, search results render instantly regardless of how large your database gets.
+
+---
+
+## Workflow & Practical Usage
+
+This setup works particularly well on dual-monitor or side-by-side tile configurations:
+- **Monitor 1:** Emacs instance running your active notes or project buffers.
+- **Monitor 2:** Terminal window ready for instant queries.
+
+```
+       [ Monitor 1: Emacs ]                 [ Monitor 2: Terminal ]
++---------------------------------+   +---------------------------------+
+|                                 |   | $ roam-find "my node title"     |
+|  * Active Org Buffer            |   |                                 |
+|                                 |   | > 10,000 nodes queried instantly|
+|  [[id:...][my node title]]      | <--- link auto-inserted via emacsclient
+|                                 |   |                                 |
++---------------------------------+   +---------------------------------+
+```
+
+### 1. Finding & Opening Nodes (`roam-find...sh`)
+* **Interactive Search:** Launches an `fzf` prompt pre-sorted by most recently modified files (`mtime DESC`), complete with a 30-line node preview pane.
+* **Direct Routing:** If a search query matches exactly one node, it skips `fzf` and opens the buffer in Emacs instantly.
+* **Terminal Command:**
+  ```bash
+  ./roam-find-recently-modified-shown-first-with-input.sh "bashrc"
+  ```
+
+### 2. Inserting Node Links (`roam-insert...sh`)
+* **Active Buffer Targeting:** Finds a node and uses `emacsclient` to drop an Org-mode link (`[[id:UUID][Title]]`) into your focused Emacs buffer—automatically adding a newline below it.
+* **File Integrity Guard:** Verifies that the `.org` file exists on disk before attempting to insert the link.
+* **Terminal Command:**
+  ```bash
+  ./roam-insert-recently-modified-shown-first-with-input.sh "project notes"
+  ```
+
+---
+
+## Project Structure
+
+```text
+.
+├── roam-find-recently-modified-shown-first-with-input.sh    # Launcher script for finding/visiting nodes
+├── roam-find-verbose-help.md                               # Full markdown documentation for roam-find
+├── roam-insert-recently-modified-shown-first-with-input.sh  # Script for inserting Org-roam links at point
+├── roam-insert-verbose-help.md                             # Full markdown documentation for roam-insert
+├── older-code/                                             # Historical implementations & experiments
+└── chat/                                                   # Development logs & design context
+```
+
+---
+
+## Quick Setup
+
+### 1. Prerequisites
+Ensure you have the required CLI utilities installed:
+* `sqlite3`
+* `fzf`
+* `emacsclient` (running an active Emacs server: `M-x server-start`)
+
+### 2. Installation
+1. Symlink or copy the scripts into your local executable path (e.g., `~/.local/bin/`):
+   ```bash
+   ln -s "$(pwd)/roam-find-recently-modified-shown-first-with-input.sh" ~/.local/bin/roam-find
+   ln -s "$(pwd)/roam-insert-recently-modified-shown-first-with-input.sh" ~/.local/bin/roam-insert
+   ```
+2. Set up the verbose help files in your local share directory so `-v` / `--verbose-help` can find them:
+   ```bash
+   mkdir -p ~/.local/share/roam-find/ ~/.local/share/roam-insert/
+   cp roam-find-verbose-help.md ~/.local/share/roam-find/
+   cp roam-insert-verbose-help.md ~/.local/share/roam-insert/
+   ```
+
+### 3. Usage
+Run either script with `-h` for quick flags or `-v` to open the full documentation directly in Emacs:
+```bash
+roam-find -h
+roam-insert --verbose-help
+```
+## How it was Developed
+
+This script was built through an iterative dialogue with Gemini (free
+version). For a detailed look at the logic, the alternative approaches
+considered, and the evolution of the code, check the contents of the
+chat/ folder in this repository.
+
+## Hints for Speeding up Emacs with 10K Roam Nodes
+
+The included Gemini chat (circa 20260925) has some productive discussion and config file changes which can speed up org roam in emacs 31.1 - I implemented some of them and observed a speed enhancement, as discussed in the chat.
+
+## License
+
+See LICENSE file
