@@ -973,3 +973,91 @@ Combine `roam-find` with shell history for fast navigation to frequently accesse
 Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113344_capture.md")
 
 ---
+
+# PROMPT 12
+I found that if I want a node title that contains spaces, I do:
+
+roam-find "my node title"
+
+if this is the best practice, please add this to the verbose help .md.  otherwise, what is the best practice for bash?
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113737_capture.md")
+
+---
+
+# RESPONSE 12
+Quoting the search term with double quotes—`roam-find "my node title"`—is indeed the standard **best practice** in Bash.
+
+Without quotes, Bash splits arguments on spaces before passing them to the script. Passing `"my node title"` ensures Bash treats the entire phrase as a single argument assigned to `$1` (which our script handles smoothly thanks to `SEARCH_TERM="$1"`).
+
+Here is the updated `help.md` content—wrapped in a 4-backtick code block—with multi-word search syntax and best practices added to both the Command Reference and Workflow Examples.
+
+```markdown
+# `roam-find` Manual & Usage Guide
+
+`roam-find` is a lightweight, terminal-native launcher for Org-roam nodes that bypasses Elisp minibuffer overhead by querying the Org-roam SQLite database directly.
+
+---
+
+## 1. Core Features
+
+- **Direct Hit Routing:** If a query yields a single unique match, it visits the node in Emacs instantly without launching the interactive picker.
+- **Fast Interactive Filtering:** If multiple matches (or no arguments) are passed, it streams items sorted by modification date (`mtime DESC`) into `fzf`.
+- **Live Node Preview:** Standard 30-line `head` preview pane inside `fzf` rendered on the fly.
+- **Terminal Session Log:** Leaves a record in your shell history printing the exact node title visited.
+
+---
+
+## 2. Command Reference
+
+| Command / Option | Action |
+| :--- | :--- |
+| `roam-find` | Opens interactive `fzf` buffer listing all nodes sorted by most recent edit. |
+| `roam-find <term>` | Searches for single-word `<term>`. |
+| `roam-find "<multi word term>"` | Best practice for multi-word titles containing spaces. |
+| `roam-find -h`, `--help` | Prints concise command-line usage to stdout. |
+| `roam-find -v`, `--verbose-help` | Opens this Markdown documentation buffer in `emacsclient`. |
+
+---
+
+## 3. Workflow Examples
+
+### Multi-Word Search (Best Practice)
+To search for node titles that contain spaces, wrap the phrase in quotes so Bash treats it as a single argument:
+```bash
+roam-find "my node title"
+```
+> **Behavior:** Filters SQLite for node titles containing the exact phrase `"my node title"`.
+
+### Instant Direct Node Lookup
+When you know a unique string or keyword in a title:
+```bash
+roam-find bashrc
+```
+> **Behavior:** Bypasses `fzf` entirely and opens `20260107114920-bashrc_file.org` in Emacs immediately.
+
+### Pre-Filtered Ambiguous Search
+When searching broad topics:
+```bash
+roam-find emacs
+```
+> **Behavior:** Opens `fzf` pre-seeded with all nodes containing "emacs", ordered by most recently modified.
+
+### Terminal History Integration (`Ctrl-r`)
+Combine `roam-find` with shell history for fast navigation to frequently accessed nodes:
+```bash
+# Press Ctrl-r in bash, type "roam-find \"my node", and hit Enter
+```
+
+---
+
+## 4. Dependencies & Paths
+
+- **Database Path:** `~/.config/emacs/org-roam.db` (or `~/.emacs.d/org-roam.db`)
+- **Required Utilities:** `sqlite3`, `fzf`, `emacsclient`, `tr`, `cut`
+
+```
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113741_capture.md")
+
+---

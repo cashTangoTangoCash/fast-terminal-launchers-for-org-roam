@@ -772,4 +772,89 @@ roam-find bashrc
 Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113344_capture.md&quot;)
 
 ---
+
+# PROMPT 12
+I found that if I want a node title that contains spaces, I do:
+
+roam-find &quot;my node title&quot;
+
+if this is the best practice, please add this to the verbose help .md.  otherwise, what is the best practice for bash?
+
+Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113737_capture.md&quot;)
+
+---
+
+# RESPONSE 12
+Quoting the search term with double quotes—`roam-find &quot;my node title&quot;`—is indeed the standard **best practice** in Bash.
+
+Without quotes, Bash splits arguments on spaces before passing them to the script. Passing `&quot;my node title&quot;` ensures Bash treats the entire phrase as a single argument assigned to `$1` (which our script handles smoothly thanks to `SEARCH_TERM=&quot;$1&quot;`).
+
+Here is the updated `help.md` content—wrapped in a 4-backtick code block—with multi-word search syntax and best practices added to both the Command Reference and Workflow Examples.
+
+```markdown
+# `roam-find` Manual &amp; Usage Guide
+
+`roam-find` is a lightweight, terminal-native launcher for Org-roam nodes that bypasses Elisp minibuffer overhead by querying the Org-roam SQLite database directly.
+
+---
+
+## 1. Core Features
+
+- **Direct Hit Routing:** If a query yields a single unique match, it visits the node in Emacs instantly without launching the interactive picker.
+- **Fast Interactive Filtering:** If multiple matches (or no arguments) are passed, it streams items sorted by modification date (`mtime DESC`) into `fzf`.
+- **Live Node Preview:** Standard 30-line `head` preview pane inside `fzf` rendered on the fly.
+- **Terminal Session Log:** Leaves a record in your shell history printing the exact node title visited.
+
+---
+
+## 2. Command Reference
+
+| Command / Option | Action |
+| :--- | :--- |
+| `roam-find` | Opens interactive `fzf` buffer listing all nodes sorted by most recent edit. |
+| `roam-find &lt;term&gt;` | Searches for single-word `&lt;term&gt;`. |
+| `roam-find &quot;&lt;multi word term&gt;&quot;` | Best practice for multi-word titles containing spaces. |
+| `roam-find -h`, `--help` | Prints concise command-line usage to stdout. |
+| `roam-find -v`, `--verbose-help` | Opens this Markdown documentation buffer in `emacsclient`. |
+
+---
+
+## 3. Workflow Examples
+
+### Multi-Word Search (Best Practice)
+To search for node titles that contain spaces, wrap the phrase in quotes so Bash treats it as a single argument:
+```bash
+roam-find &quot;my node title&quot;
+</code></pre>
+<blockquote>
+<p><strong>Behavior:</strong> Filters SQLite for node titles containing the exact phrase <code>&quot;my node title&quot;</code>.</p>
+</blockquote>
+<h3>Instant Direct Node Lookup</h3>
+<p>When you know a unique string or keyword in a title:</p>
+<pre><code class="language-bash">roam-find bashrc
+</code></pre>
+<blockquote>
+<p><strong>Behavior:</strong> Bypasses <code>fzf</code> entirely and opens <code>20260107114920-bashrc_file.org</code> in Emacs immediately.</p>
+</blockquote>
+<h3>Pre-Filtered Ambiguous Search</h3>
+<p>When searching broad topics:</p>
+<pre><code class="language-bash">roam-find emacs
+</code></pre>
+<blockquote>
+<p><strong>Behavior:</strong> Opens <code>fzf</code> pre-seeded with all nodes containing &quot;emacs&quot;, ordered by most recently modified.</p>
+</blockquote>
+<h3>Terminal History Integration (<code>Ctrl-r</code>)</h3>
+<p>Combine <code>roam-find</code> with shell history for fast navigation to frequently accessed nodes:</p>
+<pre><code class="language-bash"># Press Ctrl-r in bash, type &quot;roam-find \&quot;my node&quot;, and hit Enter
+</code></pre>
+<hr />
+<h2>4. Dependencies &amp; Paths</h2>
+<ul>
+<li><strong>Database Path:</strong> <code>~/.config/emacs/org-roam.db</code> (or <code>~/.emacs.d/org-roam.db</code>)</li>
+<li><strong>Required Utilities:</strong> <code>sqlite3</code>, <code>fzf</code>, <code>emacsclient</code>, <code>tr</code>, <code>cut</code></li>
+</ul>
+<pre><code>
+Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113741_capture.md&quot;)
+
+---
 </code></pre>

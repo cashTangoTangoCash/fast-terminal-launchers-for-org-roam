@@ -1,8 +1,10 @@
 <style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
-<h1>RESPONSE 11</h1>
-<p><strong><a href="20260925_113339_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_113737_capture.html">Next →</a></strong></p>
+<h1>RESPONSE 12</h1>
+<p><strong><a href="20260925_113737_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | End →</strong></p>
 <hr />
-<p>Here is the Markdown documentation content wrapped in a 4-backtick code block so you can copy it cleanly without nested backtick collisions:</p>
+<p>Quoting the search term with double quotes—<code>roam-find &quot;my node title&quot;</code>—is indeed the standard <strong>best practice</strong> in Bash.</p>
+<p>Without quotes, Bash splits arguments on spaces before passing them to the script. Passing <code>&quot;my node title&quot;</code> ensures Bash treats the entire phrase as a single argument assigned to <code>$1</code> (which our script handles smoothly thanks to <code>SEARCH_TERM=&quot;$1&quot;</code>).</p>
+<p>Here is the updated <code>help.md</code> content—wrapped in a 4-backtick code block—with multi-word search syntax and best practices added to both the Command Reference and Workflow Examples.</p>
 <pre><code class="language-markdown"># `roam-find` Manual &amp; Usage Guide
 
 `roam-find` is a lightweight, terminal-native launcher for Org-roam nodes that bypasses Elisp minibuffer overhead by querying the Org-roam SQLite database directly.
@@ -23,7 +25,8 @@
 | Command / Option | Action |
 | :--- | :--- |
 | `roam-find` | Opens interactive `fzf` buffer listing all nodes sorted by most recent edit. |
-| `roam-find &lt;term&gt;` | Searches for `&lt;term&gt;`. Visits directly if 1 match; opens `fzf` if multiple. |
+| `roam-find &lt;term&gt;` | Searches for single-word `&lt;term&gt;`. |
+| `roam-find &quot;&lt;multi word term&gt;&quot;` | Best practice for multi-word titles containing spaces. |
 | `roam-find -h`, `--help` | Prints concise command-line usage to stdout. |
 | `roam-find -v`, `--verbose-help` | Opens this Markdown documentation buffer in `emacsclient`. |
 
@@ -31,10 +34,17 @@
 
 ## 3. Workflow Examples
 
-### Instant Direct Node Lookup
-When you know a unique string in a title:
+### Multi-Word Search (Best Practice)
+To search for node titles that contain spaces, wrap the phrase in quotes so Bash treats it as a single argument:
 ```bash
-roam-find bashrc
+roam-find &quot;my node title&quot;
+</code></pre>
+<blockquote>
+<p><strong>Behavior:</strong> Filters SQLite for node titles containing the exact phrase <code>&quot;my node title&quot;</code>.</p>
+</blockquote>
+<h3>Instant Direct Node Lookup</h3>
+<p>When you know a unique string or keyword in a title:</p>
+<pre><code class="language-bash">roam-find bashrc
 </code></pre>
 <blockquote>
 <p><strong>Behavior:</strong> Bypasses <code>fzf</code> entirely and opens <code>20260107114920-bashrc_file.org</code> in Emacs immediately.</p>
@@ -48,7 +58,7 @@ roam-find bashrc
 </blockquote>
 <h3>Terminal History Integration (<code>Ctrl-r</code>)</h3>
 <p>Combine <code>roam-find</code> with shell history for fast navigation to frequently accessed nodes:</p>
-<pre><code class="language-bash"># Press Ctrl-r in bash, type &quot;roam-find project&quot;, and hit Enter
+<pre><code class="language-bash"># Press Ctrl-r in bash, type &quot;roam-find \&quot;my node&quot;, and hit Enter
 </code></pre>
 <hr />
 <h2>4. Dependencies &amp; Paths</h2>
@@ -60,7 +70,7 @@ roam-find bashrc
 ---
 
 
-**[← Previous](20260925_113339_capture.html) | [Full Index](../full_transcript.html) | [Next →](20260925_113737_capture.html)**
+**[← Previous](20260925_113737_capture.html) | [Full Index](../full_transcript.html) | End →**
 
-Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113344_capture.md&quot;)
+Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113741_capture.md&quot;)
 </code></pre>
