@@ -1,0 +1,22 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>RESPONSE 22</h1>
+<p><strong><a href="20260925_161331_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_161339_capture.html">Next →</a></strong></p>
+<hr />
+<p>That cold-start delay makes total sense. On that very first call after launching Emacs, a few things happen all at once:</p>
+<ol>
+<li><strong>Database Connection Warm-up:</strong> Emacs opens the SQLite connection and populates internal caches for the 10,000 nodes.</li>
+<li><strong>Feature Loading:</strong> <code>org-roam-node-read</code>, <code>vertico</code>, <code>orderless</code>, and various <code>org-mode</code> libraries get loaded into memory for the first time in that session.</li>
+<li><strong>Initial Candidate Generation:</strong> Emacs builds the full candidate list from scratch, caching portions of the data structures in memory.</li>
+</ol>
+<p>Subsequent calls taking ~1 second show that keeping your rich display template (with tags and formatting) is costing you just that single second of Elisp string manipulation—which is a very manageable tradeoff if you rely on seeing tags in Vertico/Orderless!</p>
+<p>If you ever want to eliminate even that initial cold-start delay when launching Emacs, you can force Org-roam to initialize its database connection in the background right after startup:</p>
+<pre><code class="language-elisp">;; Warm up org-roam database connection silently after Emacs finishes starting up
+(add-hook 'emacs-startup-hook
+          (lambda ()
+            (run-with-idle-timer 2 nil #'org-roam-db-sync)))
+
+</code></pre>
+<p>With the GC advice in place, your native Emacs setup is in a much healthier state. Combined with your lightning-fast <code>roam-find</code> and <code>roam-insert</code> terminal scripts for when you want zero-latency access, you have a solid setup for managing a 10,000-node graph.</p>
+<hr />
+<p><strong><a href="20260925_161331_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_161339_capture.html">Next →</a></strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_161336_capture.md&quot;)</p>

@@ -1,0 +1,27 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>RESPONSE 23</h1>
+<p><strong><a href="20260925_161339_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_161350_capture.html">Next →</a></strong></p>
+<hr />
+<p>Yes, you can easily log messages to the <code>*Messages*</code> buffer (and minibuffer echo area) before and after the warm-up task runs.</p>
+<p>Since <code>run-with-idle-timer</code> simply takes a function to execute when Emacs goes idle, you can wrap <code>org-roam-db-sync</code> inside a small custom function or lambda that handles the start and end announcements:</p>
+<pre><code class="language-elisp">(add-hook 'emacs-startup-hook
+          (lambda ()
+            (run-with-idle-timer
+             2 nil
+             (lambda ()
+               (message &quot;Warming up Org-roam database cache...&quot;)
+               (org-roam-db-sync)
+               (message &quot;Org-roam database warm-up complete!&quot;)))))
+
+</code></pre>
+<h3>How this behaves:</h3>
+<ol>
+<li><strong>2 Seconds After Idle:</strong> Emacs waits until you stop typing or moving the cursor for 2 seconds after startup.</li>
+<li><strong>Start Alert:</strong> It prints <code>&quot;Warming up Org-roam database cache...&quot;</code> in the echo area at the bottom of your screen.</li>
+<li><strong>Warm-up:</strong> <code>(org-roam-db-sync)</code> runs, opening the SQLite connection and populating the database structures.</li>
+<li><strong>Completion Alert:</strong> As soon as the sync finishes, it replaces the message with <code>&quot;Org-roam database warm-up complete!&quot;</code>.</li>
+</ol>
+<p>Both messages will also be permanently recorded in your <code>*Messages*</code> buffer if you ever want to check how long the background warm-up took during startup.</p>
+<hr />
+<p><strong><a href="20260925_161339_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_161350_capture.html">Next →</a></strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_161344_capture.md&quot;)</p>

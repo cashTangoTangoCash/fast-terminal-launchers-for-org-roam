@@ -1,0 +1,84 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>RESPONSE 17</h1>
+<p><strong><a href="20260925_161244_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_161252_capture.html">Next →</a></strong></p>
+<hr />
+<p>When scaling Org-roam to <strong>~10,000 nodes</strong>, manual database maintenance becomes less about routine tinkering and more about knowing which database commands to run—and which to avoid—to prevent locking up Emacs.</p>
+<hr />
+<h2>1. Database Commands Overview</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What It Does</th>
+<th>Performance Impact (~10k nodes)</th>
+<th>Recommended Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>org-roam-db-sync</code></td>
+<td>Scans for modified files based on <code>mtime</code> and updates dirty entries in SQLite.</td>
+<td><strong>Very fast (1–3 seconds)</strong> if only a few files changed.</td>
+<td>Regular maintenance or forced re-indexing of modified files.</td>
+</tr>
+<tr>
+<td><code>org-roam-db-sync</code> <code>(with force)</code> / <code>C-u</code></td>
+<td>Drops and rebuilds indexes on existing tables, forcing a re-parse of files.</td>
+<td><strong>Slow (10–30+ seconds)</strong>. Emacs will freeze during full parsing.</td>
+<td>Recovering from minor schema glitches or missing links without wiping everything.</td>
+</tr>
+<tr>
+<td><code>org-roam-db-clear-all</code></td>
+<td>Drops all tables and deletes database contents entirely.</td>
+<td><strong>Instant (0.1s)</strong> for the wipe itself, but requires a cold <code>org-roam-db-sync</code> afterward.</td>
+<td>Last-resort recovery from database corruption or major Org-roam version upgrades.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>2. Best Practices at 10,000 Nodes</h2>
+<h3>1. Avoid <code>org-roam-db-clear-all</code> Unless Corrupted</h3>
+<p>At 10,000 nodes, running <code>org-roam-db-clear-all</code> followed by a cold build will force Emacs to parse thousands of <code>.org</code> files single-threaded in Elisp. This can freeze Emacs for <strong>several minutes</strong>.</p>
+<ul>
+<li><strong>Rule:</strong> Prefer <code>M-x org-roam-db-sync</code> (incremental sync) for day-to-day fixes.</li>
+<li><strong>Cold Build Tip:</strong> If you <em>must</em> run <code>clear-all</code>, do it from a headless terminal session or external script using <code>emacs --batch</code> so your main editing instance doesn't freeze.</li>
+</ul>
+<h3>2. Disable Automatic Auto-Sync on Save if Not Needed</h3>
+<p>By default, <code>org-roam-db-autosync-mode</code> updates the database whenever a file is saved. At 10,000 nodes, file writes are fast, but complex AST parsing on huge files can cause tiny micro-stutters.</p>
+<ul>
+<li>If you notice save-lag, keep <code>org-roam-db-autosync-mode</code> active, but restrict the files in <code>org-roam-directory</code> to active note trees rather than static archives or giant export directories.</li>
+</ul>
+<h3>3. Exclude Non-Note Files (<code>org-roam-file-exclude-regexp</code>)</h3>
+<p>Ensure non-essential Org files (like large exports, archived project logs, or temporary buffers) are excluded from the database scanner. Every excluded file saves SQLite memory and disk I/O.</p>
+<pre><code class="language-elisp">(setq org-roam-file-exclude-regexp
+      (concat &quot;^&quot; (regexp-quote (expand-file-name &quot;archive/&quot; org-roam-directory))
+              &quot;\\|\\.gpg$&quot;))
+
+</code></pre>
+<h3>4. Optimize SQLite Direct Maintenance (WAL Mode)</h3>
+<p>Org-roam uses <code>emacsql-sqlite3</code> or <code>emacsql-sqlite-builtin</code>. SQLite handles 10,000 rows trivially, but database fragmentation or missing WAL (Write-Ahead Logging) mode can cause reader/writer locks.</p>
+<p>You can optimize the database file directly from your terminal:</p>
+<pre><code class="language-bash"># 1. Vacuum the database to rebuild indexes and reduce file fragmentation
+sqlite3 ~/.emacs.d/org-roam.db &quot;VACUUM;&quot;
+
+# 2. Optimize search query execution plans
+sqlite3 ~/.emacs.d/org-roam.db &quot;ANALYZE;&quot;
+
+# 3. Check database integrity
+sqlite3 ~/.emacs.d/org-roam.db &quot;PRAGMA quick_check;&quot;
+
+</code></pre>
+<hr />
+<h2>3. Terminal Scripts vs. <code>org-roam-db-sync</code></h2>
+<p>Because your custom scripts (<code>roam-find</code>, <code>roam-insert</code>) query <code>org-roam.db</code> directly via <code>sqlite3</code>:</p>
+<ul>
+<li><strong>Reading is Instant:</strong> SQLite indexed <code>SELECT</code> queries across 10,000 rows take <strong>&lt; 5 milliseconds</strong>. Your shell scripts will never feel slow regardless of database size.</li>
+<li><strong>Writes Depend on Emacs:</strong> SQLite is read-only for your shell scripts. The database is only updated when Emacs touches a file or runs <code>org-roam-db-sync</code>.</li>
+<li><strong>Database File Lock:</strong> SQLite allows concurrent reads while Emacs writes if WAL mode is enabled. If you ever hit <code>database is locked</code> errors in your terminal scripts, run:</li>
+</ul>
+<pre><code class="language-bash">sqlite3 ~/.emacs.d/org-roam.db &quot;PRAGMA journal_mode=WAL;&quot;
+
+</code></pre>
+<hr />
+<p><strong><a href="20260925_161244_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_161252_capture.html">Next →</a></strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_161250_capture.md&quot;)</p>

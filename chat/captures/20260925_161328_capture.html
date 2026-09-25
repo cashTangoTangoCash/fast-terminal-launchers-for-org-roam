@@ -1,0 +1,60 @@
+<style>table{border-collapse:collapse;width:100%;margin:1em 0;}th,td{border:1px solid #ccc;padding:8px;text-align:left;}th{background-color:#f8f8f8;}</style>
+<h1>RESPONSE 21</h1>
+<p><strong><a href="20260925_161323_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_161331_capture.html">Next →</a></strong></p>
+<hr />
+<p>You spotted a crucial detail. Setting <code>org-roam-db-gc-threshold</code> feels like it <em>should</em> solve the problem, but understanding <strong>where</strong> that variable acts explains why it didn't eliminate your lag.</p>
+<hr />
+<h3><code>org-roam-db-gc-threshold</code> vs. <code>gc-cons-threshold</code></h3>
+<p>While both deal with Garbage Collection, they control two completely different stages of Org-roam's operations:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>What It Controls</th>
+<th>When It Runs</th>
+<th>Impact on <code>node-find</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>org-roam-db-gc-threshold</code></strong></td>
+<td>Suppresses GC while <strong>building/syncing the SQLite database</strong> from <code>.org</code> files.</td>
+<td>During <code>org-roam-db-sync</code></td>
+<td><strong>Zero impact</strong> on <code>node-find</code> or <code>node-insert</code>.</td>
+</tr>
+<tr>
+<td><strong><code>gc-cons-threshold</code></strong></td>
+<td>Suppresses GC while <strong>allocating general Elisp memory</strong> in Emacs.</td>
+<td>Every Elisp loop (including candidate list formatting)</td>
+<td><strong>Direct impact</strong> on <code>node-find</code> UI lag.</td>
+</tr>
+</tbody>
+</table>
+<p>When you run <code>M-x org-roam-db-sync</code>, Org-roam reads your configuration for <code>org-roam-db-gc-threshold</code> so it doesn't pause to run garbage collection while parsing files on disk.</p>
+<p>However, when you run <code>org-roam-node-find</code> or <code>org-roam-node-insert</code>, Org-roam isn't syncing the database—it is reading data out of SQLite into standard Elisp memory. At that point, Emacs falls back entirely to the global <code>gc-cons-threshold</code> setting (<strong>800,000 bytes</strong>), triggering multiple GC freezes while allocating 10,000 candidate objects.</p>
+<hr />
+<h3>Is GC the Only Cause Left?</h3>
+<p>While wrapping <code>org-roam-node-read</code> with a temporary 128MB <code>gc-cons-threshold</code> will eliminate GC pauses, at <strong>10,000 nodes</strong>, Elisp string processing itself remains a core bottleneck.</p>
+<p>Even without Garbage Collection pauses, looping through 10,000 nodes in Elisp to format text properties and template strings in a single thread takes noticeable time.</p>
+<p>That is why a two-part approach inside Emacs is usually required for note graphs of this scale:</p>
+<ol>
+<li><strong>Suppress GC during candidate assembly:</strong></li>
+</ol>
+<pre><code class="language-elisp">(defun my/org-roam-gc-hack (fn &amp;rest args)
+  (let ((gc-cons-threshold (* 128 1024 1024))) ; 128MB
+    (apply fn args)))
+
+(advice-add 'org-roam-node-read :around #'my/org-roam-gc-hack)
+
+</code></pre>
+<ol start="2">
+<li><strong>Simplify the display template to minimize string construction:</strong></li>
+</ol>
+<pre><code class="language-elisp">;; Default is &quot;${title:*} ${tags:10}&quot; which forces heavy tag processing loop
+(setq org-roam-node-display-template &quot;${title}&quot;)
+
+</code></pre>
+<p>If evaluating those two lines in Emacs still leaves a noticeable delay, it confirms that standard Elisp candidate processing simply cannot compete with C-level tools—making your <code>roam-find</code> and <code>roam-insert</code> terminal scripts the ultimate permanent solution.</p>
+<hr />
+<p><strong><a href="20260925_161323_capture.html">← Previous</a> | <a href="../full_transcript.html">Full Index</a> | <a href="20260925_161331_capture.html">Next →</a></strong></p>
+<p>Edit: (find-file &quot;/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_161328_capture.md&quot;)</p>
