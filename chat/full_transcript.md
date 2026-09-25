@@ -692,3 +692,284 @@ Now you can hit `Ctrl-r`, type `roam-find bashrc`, hit `Enter`, and land directl
 Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260924_154448_capture.md")
 
 ---
+
+# PROMPT 10
+let's add built in help to this script.  -h or --help gets the typical brief help for a command line tool.  -v or --verbose-help: let's have a standalone help file that will look very nice in emacs.  markdown is probably the choice here.  -v causes our script to use emacsclient to visit the standalone help file.  this file will have friendly clear examples of how to use the script.
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113323_capture.md")
+
+---
+
+# RESPONSE 10
+Here is the updated script, fully structured to handle `-h` / `--help` directly in the terminal, and `-v` / `--verbose-help` by opening a formatted Markdown manual directly inside Emacs.
+
+### 1. The Script (`roam-find`)
+
+Save this file as `roam-find` in `~/.local/bin/` (or `~/bin/`) and make sure it is executable (`chmod +x ~/.local/bin/roam-find`):
+
+```bash
+#!/usr/bin/env bash
+
+# Paths
+DB_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db"
+[[ ! -f "$DB_PATH" ]] && DB_PATH="$HOME/.emacs.d/org-roam.db"
+
+# Path for verbose help file
+HELP_FILE="$HOME/.local/share/roam-find/help.md"
+
+# --- HELP HANDLERS ---
+
+show_brief_help() {
+    cat << 'EOF'
+Usage: roam-find [OPTION] [SEARCH_TERM]
+
+Instantly search and open Org-roam nodes in Emacs using SQLite and fzf.
+
+Options:
+  -h, --help           Show this brief command-line help message and exit.
+  -v, --verbose-help   Open the full Markdown manual in Emacs.
+
+Examples:
+  roam-find            Interactive search through all notes (sorted by mtime).
+  roam-find bashrc     Direct hit or pre-filtered fzf search for "bashrc".
+EOF
+}
+
+show_verbose_help() {
+    if [[ -f "$HELP_FILE" ]]; then
+        emacsclient -n "$HELP_FILE"
+        echo "Opened verbose documentation in Emacs: $HELP_FILE"
+    else
+        echo "Error: Verbose help file not found at $HELP_FILE" >&2
+        exit 1
+    fi
+}
+
+# Parse options
+case "$1" in
+    -h|--help)
+        show_brief_help
+        exit 0
+        ;;
+    -v|--verbose-help)
+        show_verbose_help
+        exit 0
+        ;;
+esac
+
+# Check database existence
+if [[ ! -f "$DB_PATH" ]]; then
+    echo "Error: Org-roam database not found at $DB_PATH" >&2
+    exit 1
+fi
+
+SEARCH_TERM="$1"
+BASE_SQL="SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != ''"
+
+if [[ -z "$SEARCH_TERM" ]]; then
+    # Case 1: No query passed -> load all nodes ordered by recent mtime
+    QUERY="$BASE_SQL ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+else
+    # Case 2: Query passed -> filter in SQLite
+    SAFE_TERM="${SEARCH_TERM//\'/\'\'}"
+    QUERY="$BASE_SQL AND nodes.title LIKE '%$SAFE_TERM%' ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+fi
+
+MATCH_COUNT=$(echo "$RESULTS" | sed '/^$/d' | wc -l)
+
+if [[ $MATCH_COUNT -eq 0 ]]; then
+    echo "No Org-roam nodes matching: \"$SEARCH_TERM\"" >&2
+    exit 1
+
+elif [[ $MATCH_COUNT -eq 1 ]]; then
+    # Single match -> open directly
+    SELECTION="$RESULTS"
+
+else
+    # Multiple matches -> launch fzf interface
+    SELECTION=$(echo "$RESULTS" \
+        | fzf --exact \
+              --delimiter=$'\t' \
+              --with-nth=1 \
+              --tiebreak=index \
+              ${SEARCH_TERM:+--query="$SEARCH_TERM"} \
+              --preview 'head -n 30 {2}' \
+              --preview-window=right:50%:wrap)
+fi
+
+# Visit node in Emacs
+if [[ -n "$SELECTION" ]]; then
+    TITLE=$(echo "$SELECTION" | cut -f1)
+    FILE=$(echo "$SELECTION" | cut -f2)
+
+    emacsclient -n "$FILE"
+    echo "Visited node: \"$TITLE\""
+fi
+
+```
+
+---
+
+### 2. The Standalone Markdown Help File
+
+Create the directory and file at `~/.local/share/roam-find/help.md`:
+
+```bash
+mkdir -p ~/.local/share/roam-find/
+
+```
+
+Save the following contents into `~/.local/share/roam-find/help.md`:
+
+```markdown
+# `roam-find` Manual & Usage Guide
+
+`roam-find` is a lightweight, terminal-native launcher for Org-roam nodes that bypasses Elisp minibuffer overhead by querying the Org-roam SQLite database directly.
+
+---
+
+## 1. Core Features
+
+- **Direct Hit Routing:** If a query yields a single unique match, it visits the node in Emacs instantly without launching the interactive picker.
+- **Fast Interactive Filtering:** If multiple matches (or no arguments) are passed, it streams items sorted by modification date (`mtime DESC`) into `fzf`.
+- **Live Node Preview:** Standard 30-line `head` preview pane inside `fzf` rendered on the fly.
+- **Terminal Session Log:** Leaves a record in your shell history printing the exact node title visited.
+
+---
+
+## 2. Command Reference
+
+| Command / Option | Action |
+| :--- | :--- |
+| `roam-find` | Opens interactive `fzf` buffer listing all nodes sorted by most recent edit. |
+| `roam-find <term>` | Searches for `<term>`. Visits directly if 1 match; opens `fzf` if multiple. |
+| `roam-find -h`, `--help` | Prints concise command-line usage to stdout. |
+| `roam-find -v`, `--verbose-help` | Opens this Markdown documentation buffer in `emacsclient`. |
+
+---
+
+## 3. Workflow Examples
+
+### Instant Direct Node Lookup
+When you know a unique string in a title:
+```bash
+roam-find bashrc
+
+```
+
+> **Behavior:** Bypasses `fzf` entirely and opens `20260107114920-bashrc_file.org` in Emacs immediately.
+
+### Pre-Filtered Ambiguous Search
+
+When searching broad topics:
+
+```bash
+roam-find emacs
+
+```
+
+> **Behavior:** Opens `fzf` pre-seeded with all nodes containing "emacs", ordered by most recently modified.
+
+### Terminal History Integration (`Ctrl-r`)
+
+Combine `roam-find` with shell history for fast navigation to frequently accessed nodes:
+
+```bash
+# Press Ctrl-r in bash, type "roam-find project", and hit Enter
+
+```
+
+---
+
+## 4. Dependencies & Paths
+
+* **Database Path:** `~/.config/emacs/org-roam.db` (or `~/.emacs.d/org-roam.db`)
+* **Required Utilities:** `sqlite3`, `fzf`, `emacsclient`, `tr`, `cut`
+
+```
+
+---
+
+### Verification
+1. Run `roam-find -h` in your terminal to see the brief CLI usage text.
+2. Run `roam-find -v` or `roam-find --verbose-help` to open the full Markdown documentation directly inside Emacs.
+
+```
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113336_capture.md")
+
+---
+
+# PROMPT 11
+please again post the .md verbose help content, but this time wrap it in a 4-backtick code block.
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113339_capture.md")
+
+---
+
+# RESPONSE 11
+Here is the Markdown documentation content wrapped in a 4-backtick code block so you can copy it cleanly without nested backtick collisions:
+
+```markdown
+# `roam-find` Manual & Usage Guide
+
+`roam-find` is a lightweight, terminal-native launcher for Org-roam nodes that bypasses Elisp minibuffer overhead by querying the Org-roam SQLite database directly.
+
+---
+
+## 1. Core Features
+
+- **Direct Hit Routing:** If a query yields a single unique match, it visits the node in Emacs instantly without launching the interactive picker.
+- **Fast Interactive Filtering:** If multiple matches (or no arguments) are passed, it streams items sorted by modification date (`mtime DESC`) into `fzf`.
+- **Live Node Preview:** Standard 30-line `head` preview pane inside `fzf` rendered on the fly.
+- **Terminal Session Log:** Leaves a record in your shell history printing the exact node title visited.
+
+---
+
+## 2. Command Reference
+
+| Command / Option | Action |
+| :--- | :--- |
+| `roam-find` | Opens interactive `fzf` buffer listing all nodes sorted by most recent edit. |
+| `roam-find <term>` | Searches for `<term>`. Visits directly if 1 match; opens `fzf` if multiple. |
+| `roam-find -h`, `--help` | Prints concise command-line usage to stdout. |
+| `roam-find -v`, `--verbose-help` | Opens this Markdown documentation buffer in `emacsclient`. |
+
+---
+
+## 3. Workflow Examples
+
+### Instant Direct Node Lookup
+When you know a unique string in a title:
+```bash
+roam-find bashrc
+```
+> **Behavior:** Bypasses `fzf` entirely and opens `20260107114920-bashrc_file.org` in Emacs immediately.
+
+### Pre-Filtered Ambiguous Search
+When searching broad topics:
+```bash
+roam-find emacs
+```
+> **Behavior:** Opens `fzf` pre-seeded with all nodes containing "emacs", ordered by most recently modified.
+
+### Terminal History Integration (`Ctrl-r`)
+Combine `roam-find` with shell history for fast navigation to frequently accessed nodes:
+```bash
+# Press Ctrl-r in bash, type "roam-find project", and hit Enter
+```
+
+---
+
+## 4. Dependencies & Paths
+
+- **Database Path:** `~/.config/emacs/org-roam.db` (or `~/.emacs.d/org-roam.db`)
+- **Required Utilities:** `sqlite3`, `fzf`, `emacsclient`, `tr`, `cut`
+
+```
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_113344_capture.md")
+
+---
