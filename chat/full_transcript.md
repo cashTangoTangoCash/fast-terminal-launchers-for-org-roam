@@ -2147,3 +2147,242 @@ The database warm-up hook executed cleanly without errors or file locking issues
 Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260925_161356_capture.md")
 
 ---
+
+# PROMPT 25
+I notice that the scripts do not seem to be finding nodes via alias (aliases added via org-roam-alias-add).  what is going on here?
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260926_132658_capture.md")
+
+---
+
+# RESPONSE 25
+What is happening is that Org-roam stores aliases in a **separate table** in SQLite named `aliases`.
+
+Right now, our SQL query in `roam-find` and `roam-insert` is querying **only** the `nodes` table (`SELECT nodes.title ...`). Because node aliases live in the `aliases` table, the SQL query completely ignores them!
+
+---
+
+### How Org-roam Stores Aliases
+
+Inside `org-roam.db`, Org-roam maintains two relevant tables:
+
+1. **`nodes` table:** Contains the primary `title`, `id`, and `file` path for every node.
+2. **`aliases` table:** Contains a `node_id` foreign key pointing back to `nodes.id`, and an `alias` string column.
+
+---
+
+### The Fix: Combining Titles & Aliases via `LEFT JOIN`
+
+To search across both main titles **and** aliases seamlessly without creating duplicate entries or mess, we can update our SQL query to:
+
+1. Perform a `LEFT JOIN` on the `aliases` table.
+2. Combine the primary title and any aliases into a single searchable string using SQLite's `GROUP_CONCAT` function.
+
+#### The New SQL Query Strategy
+
+```sql
+SELECT 
+    nodes.title,
+    nodes.id,
+    nodes.file,
+    COALESCE(GROUP_CONCAT(aliases.alias, ' | '), '') AS alias_list
+FROM nodes 
+JOIN files ON nodes.file = files.file 
+LEFT JOIN aliases ON nodes.id = aliases.node_id
+WHERE nodes.title IS NOT NULL AND nodes.title != ''
+GROUP BY nodes.id
+ORDER BY files.mtime DESC;
+
+```
+
+---
+
+### Testing It in Your Terminal
+
+You can test this SQL query directly in your terminal right now to see your aliases show up next to your node titles:
+
+```bash
+sqlite3 -separator $'\t' ~/.emacs.d/org-roam.db \
+  "SELECT nodes.title, COALESCE(GROUP_CONCAT(aliases.alias, ' | '), ''), nodes.file FROM nodes JOIN files ON nodes.file = files.file LEFT JOIN aliases ON nodes.id = aliases.node_id WHERE nodes.title IS NOT NULL AND nodes.title != '' GROUP BY nodes.id ORDER BY files.mtime DESC LIMIT 10;" \
+  | tr -d '"'
+
+```
+
+If a node has aliases (e.g., primary title "Linux Kernel", alias "Tux"), the second column will output `Tux`. If it has no aliases, `COALESCE` cleanly outputs an empty string.
+
+---
+
+### Updated `roam-find` Script with Alias Support
+
+Here is the updated `roam-find` script modified to query both titles and aliases. When filtering in `fzf`, you can now type either the primary node title **or** any of its aliases to find the node:
+
+```bash
+#!/usr/bin/env bash
+
+# Paths
+DB_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db"
+[[ ! -f "$DB_PATH" ]] && DB_PATH="$HOME/.emacs.d/org-roam.db"
+HELP_FILE="$HOME/.local/share/roam-find/roam-find-verbose-help.md"
+
+# --- HELP HANDLERS ---
+show_brief_help() {
+    cat << 'EOF'
+Usage: roam-find [OPTION] [SEARCH_TERM]
+
+Find and visit an Org-roam node in Emacs (searches titles and aliases).
+EOF
+}
+
+show_verbose_help() {
+    if [[ -f "$HELP_FILE" ]]; then
+        emacsclient -n "$HELP_FILE"
+    else
+        echo "Error: Help file not found at $HELP_FILE" >&2
+        exit 1
+    fi
+}
+
+case "$1" in
+    -h|--help) show_brief_help; exit 0 ;;
+    -v|--verbose-help) show_verbose_help; exit 0 ;;
+esac
+
+[[ ! -f "$DB_PATH" ]] && { echo "Error: Database not found at $DB_PATH" >&2; exit 1; }
+
+SEARCH_TERM="$1"
+
+# Base SQL incorporating LEFT JOIN on aliases
+BASE_SQL="SELECT nodes.title, COALESCE(GROUP_CONCAT(aliases.alias, ' | '), '') AS alias_list, nodes.file FROM nodes JOIN files ON nodes.file = files.file LEFT JOIN aliases ON nodes.id = aliases.node_id WHERE nodes.title IS NOT NULL AND nodes.title != '' GROUP BY nodes.id"
+
+if [[ -z "$SEARCH_TERM" ]]; then
+    QUERY="$BASE_SQL ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+else
+    SAFE_TERM="${SEARCH_TERM//\'/\'\'}"
+    # Search both primary title AND alias columns
+    QUERY="$BASE_SQL HAVING nodes.title LIKE '%$SAFE_TERM%' OR alias_list LIKE '%$SAFE_TERM%' ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+fi
+
+MATCH_COUNT=$(echo "$RESULTS" | sed '/^$/d' | wc -l)
+
+if [[ $MATCH_COUNT -eq 0 ]]; then
+    echo "No Org-roam nodes or aliases matching: \"$SEARCH_TERM\"" >&2
+    exit 1
+elif [[ $MATCH_COUNT -eq 1 ]]; then
+    SELECTION="$RESULTS"
+else
+    # Format fzf display: show Title (and Aliases if present in col 2)
+    SELECTION=$(echo "$RESULTS" \
+        | fzf --exact \
+              --delimiter=$'\t' \
+              --with-nth=1,2 \
+              --tiebreak=index \
+              ${SEARCH_TERM:+--query="$SEARCH_TERM"} \
+              --preview 'head -n 30 {3}' \
+              --preview-window=right:50%:wrap)
+fi
+
+if [[ -n "$SELECTION" ]]; then
+    FILE=$(echo "$SELECTION" | cut -f3)
+    if [[ ! -f "$FILE" ]]; then
+        echo "Error: Node file does not exist: $FILE" >&2
+        exit 1
+    fi
+    emacsclient -n "$FILE" > /dev/null
+    echo "Visited node file: $FILE"
+fi
+
+```
+
+### Updated `roam-insert` Script with Alias Support
+
+Similarly, updating `roam-insert` allows you to search by alias while still correctly inserting the node's primary ID link:
+
+```bash
+#!/usr/bin/env bash
+
+DB_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db"
+[[ ! -f "$DB_PATH" ]] && DB_PATH="$HOME/.emacs.d/org-roam.db"
+HELP_FILE="$HOME/.local/share/roam-insert/roam-insert-verbose-help.md"
+
+show_brief_help() {
+    cat << 'EOF'
+Usage: roam-insert [OPTION] [SEARCH_TERM]
+
+Select an Org-roam node (by title or alias) and insert an Org link in Emacs.
+EOF
+}
+
+show_verbose_help() {
+    if [[ -f "$HELP_FILE" ]]; then
+        emacsclient -n "$HELP_FILE"
+    else
+        echo "Error: Help file not found at $HELP_FILE" >&2
+        exit 1
+    fi
+}
+
+case "$1" in
+    -h|--help) show_brief_help; exit 0 ;;
+    -v|--verbose-help) show_verbose_help; exit 0 ;;
+esac
+
+[[ ! -f "$DB_PATH" ]] && { echo "Error: Database not found at $DB_PATH" >&2; exit 1; }
+
+SEARCH_TERM="$1"
+
+# Base SQL pulling Title, ID, File, and Aliases
+BASE_SQL="SELECT nodes.title, nodes.id, nodes.file, COALESCE(GROUP_CONCAT(aliases.alias, ' | '), '') AS alias_list FROM nodes JOIN files ON nodes.file = files.file LEFT JOIN aliases ON nodes.id = aliases.node_id WHERE nodes.title IS NOT NULL AND nodes.title != '' GROUP BY nodes.id"
+
+if [[ -z "$SEARCH_TERM" ]]; then
+    QUERY="$BASE_SQL ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+else
+    SAFE_TERM="${SEARCH_TERM//\'/\'\'}"
+    QUERY="$BASE_SQL HAVING nodes.title LIKE '%$SAFE_TERM%' OR alias_list LIKE '%$SAFE_TERM%' ORDER BY files.mtime DESC;"
+    RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
+fi
+
+MATCH_COUNT=$(echo "$RESULTS" | sed '/^$/d' | wc -l)
+
+if [[ $MATCH_COUNT -eq 0 ]]; then
+    echo "No Org-roam nodes or aliases matching: \"$SEARCH_TERM\"" >&2
+    exit 1
+elif [[ $MATCH_COUNT -eq 1 ]]; then
+    SELECTION="$RESULTS"
+else
+    # Display Title and Alias list in fzf (cols 1 and 4), preview column 3 (File)
+    SELECTION=$(echo "$RESULTS" \
+        | fzf --exact \
+              --delimiter=$'\t' \
+              --with-nth=1,4 \
+              --tiebreak=index \
+              ${SEARCH_TERM:+--query="$SEARCH_TERM"} \
+              --preview 'head -n 30 {3}' \
+              --preview-window=right:50%:wrap)
+fi
+
+if [[ -n "$SELECTION" ]]; then
+    TITLE=$(echo "$SELECTION" | cut -f1)
+    ID=$(echo "$SELECTION" | cut -f2)
+    FILE=$(echo "$SELECTION" | cut -f3)
+
+    if [[ ! -f "$FILE" ]]; then
+        echo "Error: Node file does not exist: $FILE" >&2
+        exit 1
+    fi
+
+    ORG_LINK="[[id:${ID}][${TITLE}]]"
+    SAFE_LINK="${ORG_LINK//\"/\\\"}"
+
+    emacsclient -e "(with-current-buffer (window-buffer (selected-window)) (insert \"$SAFE_LINK\\n\"))" > /dev/null
+
+    echo "Inserted Org-roam link: $ORG_LINK"
+fi
+
+```
+
+Edit: (find-file "/home/dad84/Documents/2026/20260901-standalone-org-roam/chat/captures/20260926_132705_capture.md")
+
+---

@@ -3,17 +3,14 @@
 # Paths
 DB_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/emacs/org-roam.db"
 [[ ! -f "$DB_PATH" ]] && DB_PATH="$HOME/.emacs.d/org-roam.db"
-
-# Path for verbose help file
 HELP_FILE="$HOME/Documents/2026/20260901-standalone-org-roam/roam-find-verbose-help.md"
 
 # --- HELP HANDLERS ---
-
 show_brief_help() {
     cat << 'EOF'
 Usage: roam-find [OPTION] [SEARCH_TERM]
 
-Instantly search and open pre-existing Org-roam nodes in Emacs using SQLite and fzf.
+Instantly search and open pre-existing Org-roam nodes in Emacs using SQLite and fzf.  supports org-roam aliases.
 
 Options:
   -h, --help           Show this brief command-line help message and exit.
@@ -28,72 +25,59 @@ EOF
 show_verbose_help() {
     if [[ -f "$HELP_FILE" ]]; then
         emacsclient -n "$HELP_FILE"
-        echo "Opened verbose documentation in Emacs: $HELP_FILE"
     else
-        echo "Error: Verbose help file not found at $HELP_FILE" >&2
+        echo "Error: Help file not found at $HELP_FILE" >&2
         exit 1
     fi
 }
 
-# Parse options
 case "$1" in
-    -h|--help)
-        show_brief_help
-        exit 0
-        ;;
-    -v|--verbose-help)
-        show_verbose_help
-        exit 0
-        ;;
+    -h|--help) show_brief_help; exit 0 ;;
+    -v|--verbose-help) show_verbose_help; exit 0 ;;
 esac
 
-# Check database existence
-if [[ ! -f "$DB_PATH" ]]; then
-    echo "Error: Org-roam database not found at $DB_PATH" >&2
-    exit 1
-fi
+[[ ! -f "$DB_PATH" ]] && { echo "Error: Database not found at $DB_PATH" >&2; exit 1; }
 
 SEARCH_TERM="$1"
-BASE_SQL="SELECT nodes.title, nodes.file FROM nodes JOIN files ON nodes.file = files.file WHERE nodes.title IS NOT NULL AND nodes.title != ''"
+
+# Base SQL incorporating LEFT JOIN on aliases
+BASE_SQL="SELECT nodes.title, COALESCE(GROUP_CONCAT(aliases.alias, ' | '), '') AS alias_list, nodes.file FROM nodes JOIN files ON nodes.file = files.file LEFT JOIN aliases ON nodes.id = aliases.node_id WHERE nodes.title IS NOT NULL AND nodes.title != '' GROUP BY nodes.id"
 
 if [[ -z "$SEARCH_TERM" ]]; then
-    # Case 1: No query passed -> load all nodes ordered by recent mtime
     QUERY="$BASE_SQL ORDER BY files.mtime DESC;"
     RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
 else
-    # Case 2: Query passed -> filter in SQLite
     SAFE_TERM="${SEARCH_TERM//\'/\'\'}"
-    QUERY="$BASE_SQL AND nodes.title LIKE '%$SAFE_TERM%' ORDER BY files.mtime DESC;"
+    # Search both primary title AND alias columns
+    QUERY="$BASE_SQL HAVING nodes.title LIKE '%$SAFE_TERM%' OR alias_list LIKE '%$SAFE_TERM%' ORDER BY files.mtime DESC;"
     RESULTS=$(sqlite3 -separator $'\t' "$DB_PATH" "$QUERY" | tr -d '"')
 fi
 
 MATCH_COUNT=$(echo "$RESULTS" | sed '/^$/d' | wc -l)
 
 if [[ $MATCH_COUNT -eq 0 ]]; then
-    echo "No Org-roam nodes matching: \"$SEARCH_TERM\"" >&2
+    echo "No Org-roam nodes or aliases matching: \"$SEARCH_TERM\"" >&2
     exit 1
-
 elif [[ $MATCH_COUNT -eq 1 ]]; then
-    # Single match -> open directly
     SELECTION="$RESULTS"
-
 else
-    # Multiple matches -> launch fzf interface
+    # Format fzf display: show Title (and Aliases if present in col 2)
     SELECTION=$(echo "$RESULTS" \
         | fzf --exact \
               --delimiter=$'\t' \
-              --with-nth=1 \
+              --with-nth=1,2 \
               --tiebreak=index \
               ${SEARCH_TERM:+--query="$SEARCH_TERM"} \
-              --preview 'head -n 30 {2}' \
+              --preview 'head -n 30 {3}' \
               --preview-window=right:50%:wrap)
 fi
 
-# Visit node in Emacs
 if [[ -n "$SELECTION" ]]; then
-    TITLE=$(echo "$SELECTION" | cut -f1)
-    FILE=$(echo "$SELECTION" | cut -f2)
-
-    emacsclient -n "$FILE"
-    echo "Visited node: \"$TITLE\""
+    FILE=$(echo "$SELECTION" | cut -f3)
+    if [[ ! -f "$FILE" ]]; then
+        echo "Error: Node file does not exist: $FILE" >&2
+        exit 1
+    fi
+    emacsclient -n "$FILE" > /dev/null
+    echo "Visited node file: $FILE"
 fi
